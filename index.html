@@ -11,6 +11,8 @@
             margin: 0;
             padding: 0;
         }
+
+        /* 登录相关样式可以保留也可以删掉，不影响功能 */
         .login-container {
             max-width: 400px;
             margin: 100px auto;
@@ -19,12 +21,15 @@
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
+
+        /* 关键：主页面默认显示 */
         .main-container {
-            display: none;
+            display: block;
             max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
         }
+
         .grid-container {
             display: flex;
             flex-direction: row;
@@ -149,35 +154,25 @@
     </style>
 </head>
 <body>
-    <div id="login-container" class="login-container">
-        <h2>私人百家乐AI预测系统</h2>
-        <p style="text-align: center;">请输入您的私人密码访问系统</p>
-        
-        <div class="form-group">
-            <label for="password">密码</label>
-            <input type="password" id="password" placeholder="请输入您的私人密码">
-            <div id="error-message" class="error-message">密码错误，请重试</div>
-        </div>
-        
-        <button id="login-btn" class="login-btn">登 录</button>
-    </div>
-    
+
+    <!-- ✅ 登录框已删除：打开直接进入主页面 -->
+
     <div id="main-container" class="main-container">
         <h1>私人百家乐AI预测系统</h1>
-        
+
         <div class="grid-container">
             <!-- 10列x6行的格子将通过JS动态生成 -->
         </div>
-        
+
         <div class="counter">已输入: <span id="input-count">0</span> 局</div>
-        
+
         <div class="button-group">
             <button id="btn-b">B (庄)</button>
             <button id="btn-p">P (闲)</button>
             <button id="btn-clear">清除</button>
             <button id="btn-back">退格</button>
         </div>
-        
+
         <div class="instructions">
             <h2>操作说明:</h2>
             <p>1. 点击B(庄)或P(闲)按钮输入结果</p>
@@ -187,74 +182,62 @@
     </div>
 
     <script>
-        // 初始密码
-        let currentPassword = "qqdegh33578";
-        
-        // 登录功能
-        document.getElementById('login-btn').addEventListener('click', function() {
-            const password = document.getElementById('password').value;
-            const errorMessage = document.getElementById('error-message');
-            
-            if (password === currentPassword) {
-                document.getElementById('login-container').style.display = 'none';
-                document.getElementById('main-container').style.display = 'block';
-                initializeGrid();
-            } else {
-                errorMessage.style.display = 'block';
-            }
+        // 页面加载后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeGrid();
         });
-        
+
         // 初始化网格
         function initializeGrid() {
             const gridContainer = document.querySelector('.grid-container');
             gridContainer.innerHTML = '';
-            
+
             // 创建10列x6行的格子
             for (let i = 0; i < 10; i++) {
                 const column = document.createElement('div');
                 column.className = 'column';
-                
+
                 for (let j = 0; j < 6; j++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
                     cell.dataset.index = (i * 6 + j).toString();
-                    
+
                     // 创建主结果显示区域
                     const mainResult = document.createElement('div');
                     mainResult.className = 'main-result';
                     cell.appendChild(mainResult);
-                    
+
                     // 创建预测结果显示区域
                     const predictionText = document.createElement('div');
                     predictionText.className = 'prediction-text';
                     cell.appendChild(predictionText);
-                    
+
                     column.appendChild(cell);
                 }
-                
+
                 gridContainer.appendChild(column);
             }
-            
+
             // 初始化结果数组
             window.results = [];
             updateCounter();
         }
-        
+
         // 按钮事件监听
         document.getElementById('btn-b').addEventListener('click', () => addResult('B'));
         document.getElementById('btn-p').addEventListener('click', () => addResult('P'));
         document.getElementById('btn-clear').addEventListener('click', clearAll);
         document.getElementById('btn-back').addEventListener('click', removeLast);
-        
+
         // 添加结果
         function addResult(type) {
             if (window.results.length >= 60) return;
-            
+
             window.results.push(type);
             updateGrid();
             checkForPrediction();
         }
-        
+
         // 更新网格
         function updateGrid() {
             const cells = document.querySelectorAll('.cell');
@@ -262,24 +245,25 @@
                 const index = parseInt(cell.dataset.index);
                 const mainResult = cell.querySelector('.main-result');
                 const predictionText = cell.querySelector('.prediction-text');
-                
+
                 if (index < window.results.length) {
                     cell.className = 'cell ' + window.results[index];
                     mainResult.textContent = window.results[index];
                 } else {
                     cell.className = 'cell';
                     mainResult.textContent = '';
+                    predictionText.textContent = ''; // 没输入的格子清空预测字
                 }
             });
-            
+
             updateCounter();
         }
-        
+
         // 更新计数器
         function updateCounter() {
             document.getElementById('input-count').textContent = window.results.length;
         }
-        
+
         // 清除所有
         function clearAll() {
             window.results = [];
@@ -289,29 +273,29 @@
                 el.textContent = '';
             });
         }
-        
+
         // 删除最后一个
         function removeLast() {
             if (window.results.length === 0) return;
-            
+
             window.results.pop();
             updateGrid();
         }
-        
+
         // 检查是否需要预测
         function checkForPrediction() {
             const currentRound = window.results.length;
             const predictionRounds = [27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60];
-            
+
             if (predictionRounds.includes(currentRound + 1)) {
                 makePrediction(currentRound + 1);
             }
         }
-        
+
         // 做预测
         function makePrediction(round) {
             let prediction = '';
-            
+
             // 根据规则进行预测
             switch(round) {
                 case 27:
@@ -435,7 +419,7 @@
                     }
                     break;
             }
-            
+
             if (prediction) {
                 // 找到对应的格子添加预测文本
                 const cell = document.querySelector(`.cell[data-index="${round - 1}"]`);
@@ -446,6 +430,7 @@
             }
         }
     </script>
+
     <div style="text-align:center; margin-top:20px; color:#888; font-size:14pt;">
         以上内容由AI搜集并生成，仅供参考
     </div>
