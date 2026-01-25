@@ -18,17 +18,19 @@
     }
     h1{text-align:center;margin:16px 0;}
     .wrap{max-width:760px;margin:0 auto;padding:12px;}
-    /* ===== 网格 ===== */
+
+    /* ===== 网格：改成 10 竖，每竖 6 格（10列×6行）===== */
     .grid{
       display:grid;
-      grid-template-columns:repeat(6,1fr);
+      grid-template-columns:repeat(10,1fr); /* ✅关键：从 6 改成 10 */
       gap:8px;
       background:#ddd;
       padding:10px;
       border-radius:12px;
+      overflow:hidden;
     }
     .cell{
-      height:70px;
+      aspect-ratio: 1 / 1; /* ✅让格子保持正方形，像你第二张图 */
       background:#fff;
       border:1px solid #bbb;
       border-radius:6px;
@@ -38,6 +40,7 @@
       font-size:22px;
       font-weight:900;
       position:relative;
+      min-height:42px; /* ✅防止极窄屏太小 */
     }
     .cell.B{color:#fff;background:var(--red);}
     .cell.P{color:#fff;background:var(--blue);}
@@ -47,7 +50,10 @@
       font-size:11px;
       color:#ffd700;
       font-weight:700;
+      width:100%;
+      text-align:center;
     }
+
     .counter{
       text-align:center;
       margin:10px 0;
@@ -111,10 +117,10 @@
 const MAX = 60;
 let results = [];
 
-/* ===== 触发点 ===== */
+/* ===== 触发点（不改） ===== */
 const predictionRounds = [7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58];
 
-/* ===== 18 套网格规则 ===== */
+/* ===== 18 套网格规则（不改） ===== */
 const RULES = [
   ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
   ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
@@ -163,15 +169,27 @@ function predict(){
 /* ===== 渲染 ===== */
 function render(){
   document.getElementById("count").textContent=results.length;
+
+  // 先清空全部格子（避免撤销后残留）
+  for(let i=0;i<MAX;i++){
+    const c=document.getElementById("c"+i);
+    c.className="cell";
+    c.textContent="";
+    c.innerHTML="";
+  }
+
+  // 填入已输入内容
   results.forEach((v,i)=>{
     const c=document.getElementById("c"+i);
     c.className="cell "+v;
     c.textContent=v;
   });
+
+  // 预测显示在“下一格”
   const p=predict();
   if(p){
     const c=document.getElementById("c"+results.length);
-    c.innerHTML=`<div>${""}</div><div class="pred">预测:${p}</div>`;
+    c.innerHTML = `<div class="pred">预测:${p}</div>`;
   }
 }
 
@@ -183,18 +201,15 @@ function input(x){
 }
 function undo(){
   results.pop();
-  for(let i=0;i<MAX;i++){
-    const c=document.getElementById("c"+i);
-    c.className="cell";
-    c.textContent="";
-    c.innerHTML="";
-  }
   render();
 }
 function resetAll(){
   results=[];
-  undo();
+  render();
 }
+
+// 初次渲染
+render();
 </script>
 </body>
 </html>
