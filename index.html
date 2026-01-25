@@ -1,224 +1,198 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>私人百家乐 AI 预测系统</title>
-  <style>
-    :root{
-      --bg:#f2f2f2;
-      --text:#111;
-      --red:#ff0000;   /* B 红 */
-      --blue:#005bff;  /* P 蓝 */
-      --gray:#aaa;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Arial;
-      background:var(--bg);
-      color:var(--text);
-    }
-    h1{text-align:center;margin:16px 0;}
-    .wrap{max-width:760px;margin:0 auto;padding:12px;}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>私人百家乐AI预测系统</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .main-container {
+            display: block;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .grid-container {
+            display: flex;
+            flex-direction: row;
+            gap: 5px;
+            padding: 15px;
+            background-color: #d9d9d9;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: white;
+            border: 1px solid #999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            user-select: none;
+        }
+        .cell.B { color: red; }
+        .cell.P { color: blue; }
 
-    /* 灰底外框 */
-    .gridShell{
-      background:#ddd;
-      padding:10px;
-      border-radius:12px;
-      overflow-x:auto;
-    }
+        .main-result {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .prediction-text {
+            font-size: 14px;   /* ✅ 只稍微放大，清晰但不突兀 */
+            color: #f5222d;
+            position: absolute;
+            bottom: 2px;
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+        button {
+            padding: 8px 15px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+        }
+        #btn-b { background-color: red; color: white; }
+        #btn-p { background-color: blue; color: white; }
+        #btn-clear, #btn-back { background-color: gray; color: white; }
 
-    /* 10 竖 × 每竖 6 格，竖向填充 */
-    .grid{
-      display:grid;
-      grid-template-columns:repeat(10,1fr);
-      grid-template-rows:repeat(6,70px);
-      grid-auto-flow:column;
-      gap:8px;
-      width:max-content;
-    }
-
-    .cell{
-      background:#fff;
-      border:1px solid #bbb;
-      border-radius:10px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:22px;
-      font-weight:900;
-      position:relative;
-      user-select:none;
-    }
-    .cell.B{color:#fff;background:var(--red);border-color:var(--red);}
-    .cell.P{color:#fff;background:var(--blue);border-color:var(--blue);}
-
-    /* ✅ 最终确定的预测样式（原版风格，略加强） */
-    .pred{
-      position:absolute;
-      bottom:8px;
-      width:100%;
-      text-align:center;
-      font-size:15px;          /* 比原版大一点点 */
-      font-weight:700;
-      color:#f5c400;
-      text-shadow:0 1px 1px #000;
-      pointer-events:none;
-    }
-
-    .counter{
-      text-align:center;
-      margin:10px 0;
-      font-weight:700;
-    }
-    .btnRow{
-      display:flex;
-      gap:10px;
-      justify-content:center;
-      margin:12px 0;
-      flex-wrap:wrap;
-    }
-    .btn{
-      min-width:100px;
-      height:44px;
-      border:none;
-      border-radius:8px;
-      font-size:18px;
-      font-weight:900;
-      color:#fff;
-      cursor:pointer;
-    }
-    .btn.B{background:var(--red);}
-    .btn.P{background:var(--blue);}
-    .btn.gray{background:var(--gray);}
-    .desc{
-      background:#fff;
-      border-radius:10px;
-      padding:12px;
-      margin-top:14px;
-      line-height:1.6;
-      font-size:14px;
-    }
-  </style>
+        .counter {
+            font-size: 18px;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <h1>私人百家乐 AI 预测系统</h1>
-  <div class="wrap">
-    <div class="gridShell">
-      <div class="grid" id="grid"></div>
-    </div>
+<div class="main-container">
+    <h1 style="text-align:center;">私人百家乐AI预测系统</h1>
 
-    <div class="counter">
-      已输入：<span id="count">0</span> 局
-    </div>
+    <div class="grid-container"></div>
 
-    <div class="btnRow">
-      <button class="btn B" onclick="input('B')">B（庄）</button>
-      <button class="btn P" onclick="input('P')">P（闲）</button>
-      <button class="btn gray" onclick="undo()">退格</button>
-      <button class="btn gray" onclick="resetAll()">清除</button>
-    </div>
+    <div class="counter">已输入：<span id="input-count">0</span> 局</div>
 
-    <div class="desc">
-      <b>操作说明：</b><br/>
-      1. 点击 B（庄）或 P（闲）输入结果<br/>
-      2. 系统将在第 7、10、13、16、19、22、25、28、31、34、37、40、43、46、49、52、55、58 局自动给出预测
+    <div class="button-group">
+        <button id="btn-b">B（庄）</button>
+        <button id="btn-p">P（闲）</button>
+        <button id="btn-clear">清除</button>
+        <button id="btn-back">退格</button>
     </div>
-  </div>
+</div>
 
 <script>
 const MAX = 60;
-let results = [];
-
 const predictionRounds = [7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58];
 
+let results = [];
+
+const gridContainer = document.querySelector('.grid-container');
+
+function initGrid(){
+    gridContainer.innerHTML = '';
+    for(let i=0;i<10;i++){
+        const col = document.createElement('div');
+        col.className = 'column';
+        for(let j=0;j<6;j++){
+            const idx = i*6+j;
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.index = idx;
+
+            const main = document.createElement('div');
+            main.className = 'main-result';
+
+            const pred = document.createElement('div');
+            pred.className = 'prediction-text';
+
+            cell.appendChild(main);
+            cell.appendChild(pred);
+            col.appendChild(cell);
+        }
+        gridContainer.appendChild(col);
+    }
+}
+initGrid();
+
+function lastTwoBP(){
+    const bp = results.filter(x=>x==='B'||x==='P');
+    if(bp.length < 2) return null;
+    return bp.slice(-2);
+}
+
+/* === 18 套规则（原样不动） === */
 const RULES = [
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="P"?"P":a==="B"&&b==="B"?"B":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"B":"P",
+ ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="B"&&b==="P"?"P":a==="B"&&b==="B"?"B":a==="P"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a===b?"B":"P",
+ ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+ ({a,b})=>a===b?"B":"P",
+ ({a,b})=>a===b?"P":"B",
+ ({a,b})=>a===b?"B":"P",
+ ({a,b})=>a===b?"P":"B",
+ ({a,b})=>a===b?"P":"B",
+ ({a,b})=>a===b?"B":"P",
 ];
 
-const grid = document.getElementById("grid");
-for(let i=0;i<MAX;i++){
-  const d=document.createElement("div");
-  d.className="cell";
-  d.id="c"+i;
-  grid.appendChild(d);
-}
-
-function last2(){
-  const bp=results.filter(x=>x==="B"||x==="P");
-  if(bp.length<2) return null;
-  return bp.slice(-2);
-}
-
-/* ✅ 你的规则：至少输入 6 把后才开始预测 */
-function predict(){
-  if(results.length < 6) return null;
-
-  const round=results.length+1;
-  const idx=predictionRounds.indexOf(round);
-  if(idx<0) return null;
-
-  const l2=last2();
-  if(!l2) return null;
-
-  return RULES[idx]({a:l2[0],b:l2[1]});
-}
-
 function render(){
-  document.getElementById("count").textContent=results.length;
+    document.getElementById('input-count').textContent = results.length;
+    document.querySelectorAll('.cell').forEach(c=>{
+        c.className='cell';
+        c.querySelector('.main-result').textContent='';
+        c.querySelector('.prediction-text').textContent='';
+    });
 
-  for(let i=0;i<MAX;i++){
-    const c=document.getElementById("c"+i);
-    c.className="cell";
-    c.textContent="";
-    c.innerHTML="";
-  }
+    results.forEach((v,i)=>{
+        const cell=document.querySelector(`.cell[data-index="${i}"]`);
+        cell.className='cell '+v;
+        cell.querySelector('.main-result').textContent=v;
+    });
 
-  results.forEach((v,i)=>{
-    const c=document.getElementById("c"+i);
-    c.className="cell "+v;
-    c.textContent=v;
-  });
+    /* === ✅ 唯一改动点：只要 ≥6 把就允许预测 === */
+    const next = results.length + 1;
+    const ruleIndex = predictionRounds.indexOf(next);
+    const last2 = lastTwoBP();
 
-  const p=predict();
-  if(p && results.length<MAX){
-    document.getElementById("c"+results.length)
-      .innerHTML=`<span class="pred">预测:${p}</span>`;
-  }
+    if(ruleIndex>=0 && results.length>=6 && last2){
+        const p = RULES[ruleIndex]({a:last2[0],b:last2[1]});
+        const cell=document.querySelector(`.cell[data-index="${results.length}"]`);
+        if(cell){
+            cell.querySelector('.prediction-text').textContent = '预测:'+p;
+        }
+    }
 }
 
-function input(x){
-  if(results.length>=MAX) return;
-  results.push(x);
-  render();
-}
-function undo(){
-  results.pop();
-  render();
-}
-function resetAll(){
-  results=[];
-  render();
-}
+document.getElementById('btn-b').onclick=()=>{ if(results.length<MAX){results.push('B');render();}};
+document.getElementById('btn-p').onclick=()=>{ if(results.length<MAX){results.push('P');render();}};
+document.getElementById('btn-back').onclick=()=>{ results.pop(); render(); };
+document.getElementById('btn-clear').onclick=()=>{ results=[]; render(); };
 
 render();
 </script>
