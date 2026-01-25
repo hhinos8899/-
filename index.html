@@ -6,16 +6,11 @@
   <title>私人百家乐 AI 预测系统</title>
   <style>
     :root{
-      --bg:#f2f2f2;--text:#111;
-
-      /* ✅更“正”的红蓝（你要再深/再亮我再给你调） */
+      --bg:#f2f2f2;
+      --text:#111;
       --red:#ff0000;   /* B 红 */
       --blue:#005bff;  /* P 蓝 */
       --gray:#aaa;
-
-      /* ✅格子尺寸：自适应手机/电脑，并保持正方形 */
-      --cell: clamp(52px, 8.2vw, 74px);
-      --gap: 8px;
     }
     *{box-sizing:border-box}
     body{
@@ -27,7 +22,7 @@
     h1{text-align:center;margin:16px 0;}
     .wrap{max-width:760px;margin:0 auto;padding:12px;}
 
-    /* ✅外框灰底（像你右图那种底板）+ 手机不够宽就横向滚动 */
+    /* 灰底外框 */
     .gridShell{
       background:#ddd;
       padding:10px;
@@ -35,20 +30,17 @@
       overflow-x:auto;
     }
 
-    /* ✅网格：10竖 × 每竖6格，竖向填充，并且格子用变量保证正方形 */
+    /* 10 竖 × 每竖 6 格，竖向填充 */
     .grid{
       display:grid;
-      grid-template-columns:repeat(10,var(--cell));
-      grid-template-rows:repeat(6,var(--cell));
-      grid-auto-flow:column;  /* ✅关键：先往下填，再到右边 */
-      gap:var(--gap);
-      width:max-content;      /* ✅让横向滚动生效 */
+      grid-template-columns:repeat(10,1fr);
+      grid-template-rows:repeat(6,70px);
+      grid-auto-flow:column;
+      gap:8px;
+      width:max-content;
     }
 
-    /* ✅正方形格子 */
     .cell{
-      width:var(--cell);
-      height:var(--cell);
       background:#fff;
       border:1px solid #bbb;
       border-radius:10px;
@@ -63,17 +55,16 @@
     .cell.B{color:#fff;background:var(--red);border-color:var(--red);}
     .cell.P{color:#fff;background:var(--blue);border-color:var(--blue);}
 
-    /* ✅预测字：稍微大一点点 */
+    /* ✅ 最终确定的预测样式（原版风格，略加强） */
     .pred{
       position:absolute;
-      bottom:4px;
+      bottom:8px;
       width:100%;
       text-align:center;
-      font-size:14px;     /* 原版 11 -> 14 */
-      color:#ffd700;
-      font-weight:900;
-      line-height:1;
-      text-shadow:0 1px 2px rgba(0,0,0,.25);
+      font-size:15px;          /* 比原版大一点点 */
+      font-weight:700;
+      color:#f5c400;
+      text-shadow:0 1px 1px #000;
       pointer-events:none;
     }
 
@@ -138,12 +129,11 @@
   </div>
 
 <script>
-/* ===== 基本数据 ===== */
 const MAX = 60;
 let results = [];
-/* ===== 触发点 ===== */
+
 const predictionRounds = [7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58];
-/* ===== 18 套规则（原样不动） ===== */
+
 const RULES = [
   ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
   ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
@@ -165,7 +155,6 @@ const RULES = [
   ({a,b})=>a===b?"B":"P",
 ];
 
-/* ===== 初始化 60 格 ===== */
 const grid = document.getElementById("grid");
 for(let i=0;i<MAX;i++){
   const d=document.createElement("div");
@@ -174,22 +163,26 @@ for(let i=0;i<MAX;i++){
   grid.appendChild(d);
 }
 
-/* ===== 工具 ===== */
 function last2(){
   const bp=results.filter(x=>x==="B"||x==="P");
   if(bp.length<2) return null;
   return bp.slice(-2);
 }
+
+/* ✅ 你的规则：至少输入 6 把后才开始预测 */
 function predict(){
+  if(results.length < 6) return null;
+
   const round=results.length+1;
   const idx=predictionRounds.indexOf(round);
   if(idx<0) return null;
+
   const l2=last2();
   if(!l2) return null;
+
   return RULES[idx]({a:l2[0],b:l2[1]});
 }
 
-/* ===== 渲染 ===== */
 function render(){
   document.getElementById("count").textContent=results.length;
 
@@ -209,11 +202,10 @@ function render(){
   const p=predict();
   if(p && results.length<MAX){
     document.getElementById("c"+results.length)
-      .innerHTML=`<div class="pred">预测:${p}</div>`;
+      .innerHTML=`<span class="pred">预测:${p}</span>`;
   }
 }
 
-/* ===== 操作 ===== */
 function input(x){
   if(results.length>=MAX) return;
   results.push(x);
