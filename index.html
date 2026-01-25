@@ -1,164 +1,334 @@
-<script>
-/* ===== 页面加载后初始化 ===== */
-document.addEventListener('DOMContentLoaded', () => {
-  initializeGrid();
-});
-
-/* ===== 网格初始化（原版不动） ===== */
-function initializeGrid() {
-  const gridContainer = document.querySelector('.grid-container');
-  gridContainer.innerHTML = '';
-
-  // 10列x6行（竖着输入）
-  for (let i = 0; i < 10; i++) {
-    const column = document.createElement('div');
-    column.className = 'column';
-    for (let j = 0; j < 6; j++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.dataset.index = (i * 6 + j).toString();
-
-      const mainResult = document.createElement('div');
-      mainResult.className = 'main-result';
-      cell.appendChild(mainResult);
-
-      const predictionText = document.createElement('div');
-      predictionText.className = 'prediction-text';
-      cell.appendChild(predictionText);
-
-      column.appendChild(cell);
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>私人百家乐AI预测系统</title>
+  <style>
+    body {
+      background-color: #f0f0f0;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
     }
-    gridContainer.appendChild(column);
-  }
+    /* 登录相关样式可以保留也可以删掉，不影响功能 */
+    .login-container {
+      max-width: 400px;
+      margin: 100px auto;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    /* 关键：主页面默认显示 */
+    .main-container {
+      display: block;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .grid-container {
+      display: flex;
+      flex-direction: row;
+      gap: 5px;
+      padding: 15px;
+      background-color: #d9d9d9;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    .column {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .cell {
+      width: 50px;
+      height: 50px;
+      background-color: white;
+      border: 1px solid #999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    .cell.B {
+      color: red;
+    }
+    .cell.P {
+      color: blue;
+    }
+    .prediction-text {
+      font-size: 10px; /* 预测结果小字体 */
+      color: #f5222d;
+      position: absolute;
+      bottom: 2px;
+      width: 100%;
+      text-align: center;
+    }
+    .main-result {
+      font-size: 20px; /* 主结果大字体 */
+      font-weight: bold;
+      z-index: 1;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+    button {
+      padding: 8px 15px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+    }
+    #btn-b {
+      background-color: red;
+      color: white;
+    }
+    #btn-p {
+      background-color: blue;
+      color: white;
+    }
+    #btn-clear, #btn-back {
+      background-color: gray;
+      color: white;
+    }
+    .counter {
+      font-size: 18px;
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .error-message {
+      color: red;
+      font-size: 14px;
+      margin-top: 5px;
+      display: none;
+    }
+    .login-btn {
+      width: 100%;
+      padding: 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .login-btn:hover {
+      background-color: #45a049;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .instructions {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f8f8;
+      border-radius: 5px;
+    }
+  </style>
+</head>
 
-  // 结果
-  window.results = [];
+<body>
+  <!-- ✅ 登录框已删除：打开直接进入主页面 -->
+  <div id="main-container" class="main-container">
+    <h1>私人百家乐AI预测系统</h1>
+    <div class="grid-container">
+      <!-- 10列x6行的格子将通过JS动态生成 -->
+    </div>
+    <div class="counter">已输入: <span id="input-count">0</span> 局</div>
+    <div class="button-group">
+      <button id="btn-b">B (庄)</button>
+      <button id="btn-p">P (闲)</button>
+      <button id="btn-clear">清除</button>
+      <button id="btn-back">退格</button>
+    </div>
+    <div class="instructions">
+      <h2>操作说明:</h2>
+      <p>1. 点击B(庄)或P(闲)按钮输入结果</p>
+      <p>2. 系统将在第7、10、13、16、19、22、25、28、31、34、37、40、43、46、49、52、55、58局自动预测</p>
+      <p>3. 主结果显示在格子中央（大字体），预测结果显示在格子下方（小字体）</p>
+    </div>
+  </div>
 
-  // ✅关键：预测记录表（预测写进去就“封存”，不会被后续输入清掉）
-  window.predMap = {}; // key: cellIndex(0-59)  value: "预测:B/P"
+  <script>
+    // ✅ 你的触发点（18个）
+    const predictionRounds = [7, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46, 49, 52, 55, 58];
 
-  updateCounter();
-  updateGrid(); // 首次渲染
-}
+    // ✅ 18 套规则（你之前那套：只看最近两把 BP）
+    const RULES = [
+      ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="B"&&b==="P"?"P":a==="B"&&b==="B"?"B":a==="P"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a===b?"B":"P",
+      ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
+      ({a,b})=>a===b?"B":"P",
+      ({a,b})=>a===b?"P":"B",
+      ({a,b})=>a===b?"B":"P",
+      ({a,b})=>a===b?"P":"B",
+      ({a,b})=>a===b?"P":"B",
+      ({a,b})=>a===b?"B":"P",
+    ];
 
-/* ===== 按钮绑定（原版不动） ===== */
-document.getElementById('btn-b').addEventListener('click', () => addResult('B'));
-document.getElementById('btn-p').addEventListener('click', () => addResult('P'));
-document.getElementById('btn-clear').addEventListener('click', clearAll);
-document.getElementById('btn-back').addEventListener('click', removeLast);
+    // ✅ 页面加载后：先建格子，再绑定按钮（避免白屏）
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeGrid();
 
-/* ===== 预测触发点（你的规则：7~58那18个） ===== */
-const predictionRounds = [7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58];
+      // ✅ 按钮绑定放这里：DOM 肯定已经出来
+      document.getElementById('btn-b').addEventListener('click', () => addResult('B'));
+      document.getElementById('btn-p').addEventListener('click', () => addResult('P'));
+      document.getElementById('btn-clear').addEventListener('click', clearAll);
+      document.getElementById('btn-back').addEventListener('click', removeLast);
+    });
 
-/* ===== 18套规则（和你之前那套一致：只看最近两把BP） ===== */
-const RULES = [
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="P"?"P":a==="B"&&b==="B"?"B":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="B"&&b==="B"?"B":a==="B"&&b==="P"?"P":a==="P"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="P"?"P":a==="P"&&b==="B"?"B":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a==="P"&&b==="B"?"B":a==="P"&&b==="P"?"P":a==="B"&&b==="P"?"B":"P",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"B":"P",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"P":"B",
-  ({a,b})=>a===b?"B":"P",
-];
+    // 初始化网格
+    function initializeGrid() {
+      const gridContainer = document.querySelector('.grid-container');
+      gridContainer.innerHTML = '';
 
-/* ===== 添加结果 ===== */
-function addResult(type) {
-  if (window.results.length >= 60) return;
+      // 创建10列x6行的格子（保持你原版）
+      for (let i = 0; i < 10; i++) {
+        const column = document.createElement('div');
+        column.className = 'column';
+        for (let j = 0; j < 6; j++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.index = (i * 6 + j).toString();
 
-  window.results.push(type);
+          const mainResult = document.createElement('div');
+          mainResult.className = 'main-result';
+          cell.appendChild(mainResult);
 
-  updateGrid();
-  maybeWritePrediction(); // ✅写预测（写进predMap，永不被清）
-}
+          const predictionText = document.createElement('div');
+          predictionText.className = 'prediction-text';
+          cell.appendChild(predictionText);
 
-/* ===== 更新网格：主结果照画；预测永远从 predMap 回填（不会丢） ===== */
-function updateGrid() {
-  const cells = document.querySelectorAll('.cell');
-  cells.forEach(cell => {
-    const index = parseInt(cell.dataset.index, 10);
-    const mainResult = cell.querySelector('.main-result');
-    const predictionText = cell.querySelector('.prediction-text');
+          column.appendChild(cell);
+        }
+        gridContainer.appendChild(column);
+      }
 
-    if (index < window.results.length) {
-      cell.className = 'cell ' + window.results[index];
-      mainResult.textContent = window.results[index];
-    } else {
-      cell.className = 'cell';
-      mainResult.textContent = '';
+      // 结果数组
+      window.results = [];
+
+      // ✅ 预测存档：预测一旦写入就永久保留（除非清除/退格删后面）
+      window.predMap = {}; // key: cellIndex(0-59)  value: "预测:B/P"
+
+      updateGrid();
     }
 
-    // ✅关键：预测永远从 predMap 渲染（历史预测不会被刷新删掉）
-    predictionText.textContent = window.predMap[index] || '';
-  });
+    // 添加结果
+    function addResult(type) {
+      if (window.results.length >= 60) return;
+      window.results.push(type);
+      updateGrid();
+      maybeWritePrediction();
+    }
 
-  updateCounter();
-}
+    // 更新网格（主结果照画；预测从 predMap 回填，不会被清）
+    function updateGrid() {
+      const cells = document.querySelectorAll('.cell');
+      cells.forEach(cell => {
+        const index = parseInt(cell.dataset.index, 10);
+        const mainResult = cell.querySelector('.main-result');
+        const predictionText = cell.querySelector('.prediction-text');
 
-/* ===== 计数器 ===== */
-function updateCounter() {
-  document.getElementById('input-count').textContent = window.results.length;
-}
+        if (index < window.results.length) {
+          cell.className = 'cell ' + window.results[index];
+          mainResult.textContent = window.results[index];
+        } else {
+          cell.className = 'cell';
+          mainResult.textContent = '';
+        }
 
-/* ===== 清除 ===== */
-function clearAll() {
-  window.results = [];
-  window.predMap = {};     // ✅清除时才清空所有预测
-  updateGrid();
-}
+        predictionText.textContent = window.predMap[index] || '';
+      });
 
-/* ===== 退格 ===== */
-function removeLast() {
-  if (window.results.length === 0) return;
+      document.getElementById('input-count').textContent = window.results.length;
+    }
 
-  window.results.pop();
+    // 清除所有
+    function clearAll() {
+      window.results = [];
+      window.predMap = {}; // ✅ 只有清除才清空全部预测
+      updateGrid();
+    }
 
-  // ✅把“当前以及后面”的预测都删掉（因为状态回退了）
-  for (let i = window.results.length; i < 60; i++) {
-    delete window.predMap[i];
-  }
+    // 退格
+    function removeLast() {
+      if (window.results.length === 0) return;
 
-  updateGrid();
-  maybeWritePrediction(); // 回退后如果该格需要预测，重新写（写进predMap）
-}
+      window.results.pop();
 
-/* ===== 最近两把BP ===== */
-function last2BP() {
-  const bp = window.results.filter(x => x === 'B' || x === 'P');
-  if (bp.length < 2) return null;
-  return bp.slice(-2);
-}
+      // ✅ 退格后：把当前格及其后面的“未来预测”删掉，避免残留
+      for (let i = window.results.length; i < 60; i++) {
+        delete window.predMap[i];
+      }
 
-/* ===== ✅你的规则：输入满6把后，遇到触发点才写预测；预测写进predMap并永久保留 ===== */
-function maybeWritePrediction() {
-  // 必须先输入6把才开始预测
-  if (window.results.length < 6) return;
+      updateGrid();
+      maybeWritePrediction();
+    }
 
-  const nextRound = window.results.length + 1; // 下一把的局数
-  const ruleIndex = predictionRounds.indexOf(nextRound);
-  if (ruleIndex < 0) return;
+    // 最近两把BP
+    function last2BP() {
+      const bp = window.results.filter(x => x === 'B' || x === 'P');
+      if (bp.length < 2) return null;
+      return bp.slice(-2);
+    }
 
-  const l2 = last2BP();
-  if (!l2) return;
+    // ✅ 6把后开始预测；遇到触发点写预测到“下一格”，并永久保留
+    function maybeWritePrediction() {
+      if (window.results.length < 6) return; // ✅ 关键：第1-6把不预测
 
-  const p = RULES[ruleIndex]({ a: l2[0], b: l2[1] });
-  const cellIndex = window.results.length; // 预测写在“下一格”(空格)
+      const nextRound = window.results.length + 1;
+      const ruleIndex = predictionRounds.indexOf(nextRound);
+      if (ruleIndex < 0) return;
 
-  // ✅如果这个格子已经有预测（历史），不强行覆盖；没有才写入
-  if (!window.predMap[cellIndex]) {
-    window.predMap[cellIndex] = `预测:${p}`;
-    updateGrid();
-  }
-}
-</script>
+      const l2 = last2BP();
+      if (!l2) return;
 
+      const p = RULES[ruleIndex]({ a: l2[0], b: l2[1] });
+      const cellIndex = window.results.length; // 下一格
+
+      // ✅ 不覆盖历史预测：只要写过就一直留
+      if (!window.predMap[cellIndex]) {
+        window.predMap[cellIndex] = `预测:${p}`;
+        updateGrid();
+      }
+    }
+  </script>
+
+  <div style="text-align:center; margin-top:20px; color:#888; font-size:14pt;">
+    以上内容由AI搜集并生成，仅供参考
+  </div>
+</body>
+</html>
