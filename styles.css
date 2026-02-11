@@ -718,3 +718,19 @@ html, body{
 .paper{
   min-height: 100vh;
 }
+/* 竖屏时强制横屏显示（适合桌面横版网页当APP用） */
+@media (orientation: portrait){
+  html, body{
+    width: 100vh;
+    height: 100vw;
+    overflow-x: hidden;
+  }
+  body{
+    position: absolute;
+    top: 100%;
+    left: 0;
+    transform: rotate(90deg);
+    transform-origin: left top;
+  }
+}
+
