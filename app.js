@@ -7,13 +7,17 @@
    - 信息条：algoBar（有就更新，没有就忽略）
    - 弹窗：instModal / instText（有就支持 toggleInstructions）
    - 按钮：player-btn banker-btn back-btn reset-btn instruction-btn（有就禁用）
-   - 算法：A/B/C/D/E/F 全真规则
-   - 调度：实时胜率最高；当前算法连错>=3 强制换到其它最高胜率
-   - 撤销：从头重算（最稳，不会算错）
-   - ✅ 新增：到第25局显示“已达到25局，本轮强制停止”，并禁止继续输入
-   - ✅ 新增：刷新不清空（localStorage 仅保存/恢复 gameHistory）
-   - ✅ 修改：锁定算法，不每把切换；连错>=3（或本手锁定算法算不出）才换
+   - 算法：A/B/C/D/E/F 全真规则（不改）
+   - 调度（最终规则）：
+       ✅ 允许每把云计算胜率
+       ✅ 但只在两种情况切换算法：
+          1) 本手锁定算法算不出（= 没显示预测）
+          2) 锁定算法连错 >= 3
+       ✅ 其它情况绝不切换
+   - ✅ 25局强制停止（但 Reset/Back 仍可用，不死锁）
+   - ✅ 刷新不清空（localStorage 仅保存/恢复 gameHistory）
 ========================================================= */
+
 /* =========================
    工具：解析 “BBPPBB→P，...” 成 Map
 ========================= */
@@ -43,6 +47,7 @@ function suffix(arr, n) {
   if (arr.length < n) return null;
   return arr.slice(arr.length - n).join("");
 }
+
 /* =========================
    百分比循环（你用的那套）
 ========================= */
@@ -54,10 +59,12 @@ function nextFixedPercent() {
   return v;
 }
 function fmtPct(v) { return `+${Number(v).toFixed(2)}%`; }
+
 /* =========================
-   ✅ 本轮最大局数：25
+   本轮最大局数：25
 ========================= */
 const MAX_HANDS = 25;
+
 /* =========================
    A：你最早那套（递增窗口 4→5→6，最短3位）
 ========================= */
@@ -102,6 +109,7 @@ function predictA(history) {
   if (aWindowN < 6) aWindowN += 1;
   return null;
 }
+
 /* =========================
    B：固定窗口=4（你定的 16 条）
 ========================= */
@@ -128,6 +136,7 @@ function predictB(history) {
   const s = suffix(history, 4);
   return RULES_B.get(s) || null;
 }
+
 /* =========================
    C：你“规则C”那一整段（固定末6）
 ========================= */
@@ -150,6 +159,7 @@ function predictC(history) {
   const s = suffix(history, 6);
   return RULES_C.get(s) || null;
 }
+
 /* =========================
    D：你“规则D”那一整段（固定末6）
 ========================= */
@@ -171,6 +181,7 @@ function predictD(history) {
   const s = suffix(history, 6);
   return RULES_D.get(s) || null;
 }
+
 /* =========================
    E：你“第5套（E）正宗版”（固定末6：B段+P段）
 ========================= */
@@ -193,6 +204,7 @@ function predictE(history) {
   if (s[0] === "P") return RULES_E_P.get(s) || null;
   return null;
 }
+
 /* =========================
    F：规则六（固定末6：B段+P段）
 ========================= */
@@ -217,8 +229,9 @@ function predictF(history) {
   if (s[0] === "P") return RULES_F_P.get(s) || null;
   return null;
 }
+
 /* =========================
-   引擎：实时胜率 + 连错3切换
+   引擎：实时胜率 + 连错统计
 ========================= */
 function makeAlgo(name, predictor) {
   return { name, predictor, total: 0, hit: 0, loseStreak: 0 };
@@ -233,6 +246,7 @@ const ALGOS = [
 ];
 function algoByName(name) { return ALGOS.find(a => a.name === name); }
 function rateOf(a) { return a.total === 0 ? 0 : (a.hit / a.total); }
+
 /* =========================
    全局状态
 ========================= */
@@ -240,18 +254,22 @@ let gameHistory = [];
 let waiting = false;
 let timer = null;
 let trendChart = null;
-// ✅ 本轮是否已强制停止
+
+// 本轮是否已强制停止
 let roundStopped = false;
-// ✅ 锁定算法（不每把切换）
+
+// ✅ 锁定算法（不每把切）
 let lockedAlgoName = null;
+
 // 上一手预测快照（用来结算本手胜率）
 let pending = {
   byAlgo: new Map(),
   activeAlgoName: null,
   activePred: null,
 };
+
 /* =========================
-   ✅ 新增：刷新不清空（只保存/恢复 gameHistory，不改任何算法逻辑）
+   刷新不清空：只保存/恢复 gameHistory
 ========================= */
 const STORAGE_KEY = "bacc_history_v1";
 function saveHistory() {
@@ -264,11 +282,13 @@ function loadHistory() {
     if (Array.isArray(arr)) gameHistory = arr.filter(x => x === "B" || x === "P");
   } catch (e) {}
 }
+
 /* =========================
    DOM 工具
 ========================= */
 function byId(id) { return document.getElementById(id); }
 function q(sel) { return document.querySelector(sel); }
+
 function setButtonsDisabled(disabled) {
   const p = q(".player-btn");
   const b = q(".banker-btn");
@@ -281,8 +301,17 @@ function setButtonsDisabled(disabled) {
   if (reset) reset.disabled = disabled;
   if (inst) inst.disabled = disabled;
 }
+
+// ✅ 只禁“录入”按钮（防止25局后把 Reset/Back 一起禁掉导致死锁）
+function setInputDisabled(disabled) {
+  const p = q(".player-btn");
+  const b = q(".banker-btn");
+  if (p) p.disabled = disabled;
+  if (b) b.disabled = disabled;
+}
+
 /* =========================
-   ✅ 第25局停止提示
+   25局停止提示
 ========================= */
 function showStopMessage() {
   const label = byId("resultLabel");
@@ -301,9 +330,13 @@ function applyStoppedStateIfNeeded() {
     if (timer) { clearTimeout(timer); timer = null; }
     waiting = false;
     showStopMessage();
-    setButtonsDisabled(true);
+    setInputDisabled(true); // ✅ 只禁 P/B，允许 Reset/Back
+  } else {
+    // 没停：确保输入可用（如果没在等待中）
+    if (!waiting) setInputDisabled(false);
   }
 }
+
 /* =========================
    UI：记录
 ========================= */
@@ -318,6 +351,7 @@ function renderHistory() {
     el.appendChild(d);
   });
 }
+
 /* =========================
    UI：趋势图（累计B/P）
 ========================= */
@@ -355,6 +389,7 @@ function updateTrendChart() {
     },
   });
 }
+
 /* =========================
    UI：预测显示
 ========================= */
@@ -392,6 +427,7 @@ function showIdle(msg) {
   if (pctEl) pctEl.textContent = "";
   if (text) text.textContent = msg || "请稍候...";
 }
+
 /* =========================
    UI：算法条（有就更新，没有就忽略）
 ========================= */
@@ -408,6 +444,7 @@ function updateAlgoBar() {
   }
   bar.textContent = `当前算法：${name}｜胜率：${r}｜连错：${ls}`;
 }
+
 /* =========================
    计算下一手：各算法预测
 ========================= */
@@ -419,6 +456,7 @@ function computeAllPredictions() {
   }
   return map;
 }
+
 /* =========================
    结算：用上一手 pending 结算本手胜率
 ========================= */
@@ -438,46 +476,42 @@ function scoreWithActual(actual) {
     }
   }
 }
+
 /* =========================
-   选择对外算法（锁定+连错3才换）
-   - 每把都可计算胜率
-   - 但不每把切换：锁定后一直用
-   - 连错>=3 或本手锁定算法预测不了 才切到“当前可预测里胜率最高”
+   选择对外算法（最终：只在两种情况切换）
+   1) 本手没有显示预测（锁定算法本手算不出）
+   2) 锁定算法连错 >= 3
 ========================= */
 function pickActive(predMap) {
-  if (predMap.size === 0) return null;
-
   const available = ALGOS
     .filter(a => predMap.has(a.name))
     .slice()
     .sort((x, y) => rateOf(y) - rateOf(x));
 
-  if (available.length === 0) return null;
+  // 本手没有任何算法能预测：不切换（保持锁定），返回锁定或 null
+  if (available.length === 0) return lockedAlgoName || null;
 
-  // 第一次：锁定当前胜率最高
+  // 第一次：锁定“本手可预测里胜率最高”
   if (!lockedAlgoName) {
     lockedAlgoName = available[0].name;
     return lockedAlgoName;
   }
 
   const locked = algoByName(lockedAlgoName);
+  const lockedCanPredictThisHand = predMap.has(lockedAlgoName);
+  const lockedLose3 = locked ? (locked.loseStreak >= 3) : false;
 
-  // 锁定算法本手算不出来：切到本手可预测里胜率最高
-  if (!predMap.has(lockedAlgoName)) {
-    lockedAlgoName = available[0].name;
+  // ✅ 只在两种情况切换
+  if (!lockedCanPredictThisHand || lockedLose3) {
+    const bestOther = available.find(a => a.name !== lockedAlgoName);
+    lockedAlgoName = (bestOther ? bestOther.name : available[0].name);
     return lockedAlgoName;
   }
 
-  // 连错>=3：才允许切换（切到“其它算法里”胜率最高的）
-  if (locked && locked.loseStreak >= 3) {
-    const others = available.filter(a => a.name !== lockedAlgoName);
-    lockedAlgoName = (others.length ? others[0].name : available[0].name);
-    return lockedAlgoName;
-  }
-
-  // 否则继续用锁定算法
+  // 其它情况：继续用锁定算法
   return lockedAlgoName;
 }
+
 /* =========================
    生成下一手预测（2秒延迟）
 ========================= */
@@ -488,27 +522,35 @@ function updatePrediction() {
     return;
   }
   if (timer) { clearTimeout(timer); timer = null; }
+
   const predMap = computeAllPredictions();
   const activeName = pickActive(predMap);
   const activePred = activeName ? predMap.get(activeName) : null;
+
   pending = { byAlgo: predMap, activeAlgoName: activeName, activePred: activePred };
   updateAlgoBar();
+
   if (!activePred) {
     showIdle("请稍候...");
     return;
   }
+
   waiting = true;
   setButtonsDisabled(true);
   showPending();
+
   const pct = nextFixedPercent();
   timer = setTimeout(() => {
     showResult(activePred, pct);
     waiting = false;
     setButtonsDisabled(false);
     timer = null;
+
+    applyStoppedStateIfNeeded();
     updateAlgoBar();
   }, 2000);
 }
+
 /* =========================
    撤销：从头重算（最稳）
 ========================= */
@@ -516,12 +558,14 @@ function rebuildAllFromScratch() {
   if (timer) { clearTimeout(timer); timer = null; }
   waiting = false;
   setButtonsDisabled(false);
+
   const saved = [...gameHistory];
 
+  // 清空统计
   gameHistory = [];
   pctIdx = 0;
   aWindowN = 4;
-  lockedAlgoName = null; // ✅ 重置锁定算法
+  lockedAlgoName = null;
   for (const a of ALGOS) {
     a.total = 0;
     a.hit = 0;
@@ -529,11 +573,14 @@ function rebuildAllFromScratch() {
   }
   pending = { byAlgo: new Map(), activeAlgoName: null, activePred: null };
 
+  // 先算第一手预测（通常无）
   updatePrediction();
 
+  // 重放：先结算再推进（重放不走2秒动画）
   for (const outcome of saved) {
     scoreWithActual(outcome);
     gameHistory.push(outcome);
+
     const predMap = computeAllPredictions();
     const activeName = pickActive(predMap);
     const activePred = activeName ? predMap.get(activeName) : null;
@@ -542,8 +589,11 @@ function rebuildAllFromScratch() {
 
   renderHistory();
   updateTrendChart();
-  updatePrediction();
+  applyStoppedStateIfNeeded();
+  updateAlgoBar();
+  if (!roundStopped) updatePrediction();
 }
+
 /* =========================
    弹窗：胜率/说明（有就启用）
 ========================= */
@@ -553,7 +603,7 @@ window.toggleInstructions = function () {
   if (!modal || !text) return;
   const lines = [];
   lines.push("算法：A/B/C/D/E/F（后台同时统计胜率）");
-  lines.push("调度：实时胜率最高出预测；当前算法连错3把→强制切到其它最高胜率");
+  lines.push("调度：只在“本手无预测”或“连错3把”时切换到当前最高胜率算法");
   lines.push("");
   const sorted = [...ALGOS].sort((x, y) => rateOf(y) - rateOf(x));
   for (const a of sorted) {
@@ -567,6 +617,7 @@ window.closeInstructions = function () {
   const modal = byId("instModal");
   if (modal) modal.classList.add("hidden");
 };
+
 /* =========================
    缩放（有滑块就启用；不改变你其它内容）
 ========================= */
@@ -585,6 +636,7 @@ function initZoom() {
   apply(slider.value || 70);
   slider.addEventListener("input", (e) => apply(e.target.value));
 }
+
 /* =========================
    按钮
 ========================= */
@@ -592,37 +644,49 @@ window.recordResult = function (type) {
   if (waiting) return;
   if (type !== "B" && type !== "P") return;
 
+  // 已到25局：强制停止（不允许继续录入）
   if (roundStopped || gameHistory.length >= MAX_HANDS) {
     applyStoppedStateIfNeeded();
     updateAlgoBar();
     return;
   }
 
+  // 先结算本手（用上一手预测）
   scoreWithActual(type);
+
+  // 再写入历史
   gameHistory.push(type);
   saveHistory();
+
   renderHistory();
   updateTrendChart();
 
+  // 如果刚好到25局：立刻停（且不再预测）
   applyStoppedStateIfNeeded();
   updateAlgoBar();
   if (roundStopped) return;
 
   updatePrediction();
 };
+
 window.undoLastMove = function () {
   if (waiting) return;
   gameHistory.pop();
   saveHistory();
   rebuildAllFromScratch();
 };
+
 window.resetGame = function () {
   if (waiting) return;
+
   gameHistory = [];
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+
   pctIdx = 0;
   aWindowN = 4;
-  lockedAlgoName = null; // ✅ 重置锁定算法
+  lockedAlgoName = null;
+  roundStopped = false;
+
   if (timer) { clearTimeout(timer); timer = null; }
   for (const a of ALGOS) {
     a.total = 0;
@@ -630,23 +694,32 @@ window.resetGame = function () {
     a.loseStreak = 0;
   }
   pending = { byAlgo: new Map(), activeAlgoName: null, activePred: null };
+
   setButtonsDisabled(false);
+  setInputDisabled(false);
+
   renderHistory();
   updateTrendChart();
   showIdle("请稍候...");
   updateAlgoBar();
   updatePrediction();
 };
+
 /* =========================
    初始化
 ========================= */
 document.addEventListener("DOMContentLoaded", function () {
   initZoom();
+
   loadHistory();
-  applyStoppedStateIfNeeded();
-  renderHistory();
-  updateTrendChart();
-  showIdle("请稍候...");
-  updateAlgoBar();
-  updatePrediction();
+  // 让胜率/连错/锁定算法与历史一致（最稳）
+  if (gameHistory.length > 0) rebuildAllFromScratch();
+  else {
+    applyStoppedStateIfNeeded();
+    renderHistory();
+    updateTrendChart();
+    showIdle("请稍候...");
+    updateAlgoBar();
+    updatePrediction();
+  }
 });
