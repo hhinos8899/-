@@ -12,7 +12,7 @@
        ✅ 允许每把云计算胜率
        ✅ 但只在两种情况切换算法：
           1) 本手锁定算法算不出（= 没显示预测）
-          2) 锁定算法连错 >= 3
+          2) 锁定算法连错 >= 4
        ✅ 其它情况绝不切换
    - ✅ 25局强制停止（但 Reset/Back 仍可用，不死锁）
    - ✅ 刷新不清空（localStorage 仅保存/恢复 gameHistory）
@@ -480,7 +480,7 @@ function scoreWithActual(actual) {
 /* =========================
    选择对外算法（最终：只在两种情况切换）
    1) 本手没有显示预测（锁定算法本手算不出）
-   2) 锁定算法连错 >= 3
+   2) 锁定算法连错 >= 4
 ========================= */
 function pickActive(predMap) {
   const available = ALGOS
@@ -499,7 +499,7 @@ function pickActive(predMap) {
 
   const locked = algoByName(lockedAlgoName);
   const lockedCanPredictThisHand = predMap.has(lockedAlgoName);
-  const lockedLose3 = locked ? (locked.loseStreak >= 3) : false;
+  const lockedLose3 = locked ? (locked.loseStreak >= 4) : false;
 
   // ✅ 只在两种情况切换
   if (!lockedCanPredictThisHand || lockedLose3) {
@@ -723,3 +723,4 @@ document.addEventListener("DOMContentLoaded", function () {
     updatePrediction();
   }
 });
+
