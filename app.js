@@ -247,7 +247,6 @@ let pending = {
   activeAlgoName: null,
   activePred: null,
 };
-
 /* =========================
    ✅ 新增：刷新不清空（只保存/恢复 gameHistory，不改任何算法逻辑）
 ========================= */
@@ -262,7 +261,6 @@ function loadHistory() {
     if (Array.isArray(arr)) gameHistory = arr.filter(x => x === "B" || x === "P");
   } catch (e) {}
 }
-
 /* =========================
    DOM 工具
 ========================= */
@@ -423,14 +421,12 @@ function computeAllPredictions() {
 ========================= */
 function scoreWithActual(actual) {
   if (!pending || pending.byAlgo.size === 0) return;
-  // 所有算法：上一手只要出过预测，就计入胜率
   for (const [name, pred] of pending.byAlgo.entries()) {
     const algo = algoByName(name);
     if (!algo) continue;
     algo.total += 1;
     if (pred === actual) algo.hit += 1;
   }
-  // 当前使用算法：连错统计
   if (pending.activeAlgoName && pending.activePred) {
     const active = algoByName(pending.activeAlgoName);
     if (active) {
@@ -441,8 +437,6 @@ function scoreWithActual(actual) {
 }
 /* =========================
    选择对外算法
-   - 默认：在“本手能预测”的算法里，胜率最高者
-   - 若当前算法连错>=3：强制排除当前算法再选
 ========================= */
 function pickActive(predMap) {
   if (predMap.size === 0) return null;
@@ -455,7 +449,6 @@ function pickActive(predMap) {
     .slice()
     .sort((x, y) => rateOf(y) - rateOf(x));
   if (candidates.length > 0) return candidates[0].name;
-  // 极少情况：强制切换但只剩它能预测，则退回所有可预测的最高胜率
   const fallback = ALGOS
     .filter(a => predMap.has(a.name))
     .slice()
@@ -466,6 +459,11 @@ function pickActive(predMap) {
    生成下一手预测（2秒延迟）
 ========================= */
 function updatePrediction() {
+  if (roundStopped || gameHistory.length >= MAX_HANDS) {
+    applyStoppedStateIfNeeded();
+    updateAlgoBar();
+    return;
+  }
   if (timer) { clearTimeout(timer); timer = null; }
   const predMap = computeAllPredictions();
   const activeName = pickActive(predMap);
@@ -496,7 +494,6 @@ function rebuildAllFromScratch() {
   waiting = false;
   setButtonsDisabled(false);
   const saved = [...gameHistory];
-  // 清空统计
   gameHistory = [];
   pctIdx = 0;
   aWindowN = 4;
@@ -506,9 +503,7 @@ function rebuildAllFromScratch() {
     a.loseStreak = 0;
   }
   pending = { byAlgo: new Map(), activeAlgoName: null, activePred: null };
-  // 先算第一手预测（通常无）
   updatePrediction();
-  // 重放：先结算再推进（重放不走2秒动画）
   for (const outcome of saved) {
     scoreWithActual(outcome);
     gameHistory.push(outcome);
@@ -546,9 +541,6 @@ window.closeInstructions = function () {
 };
 /* =========================
    缩放（有滑块就启用；不改变你其它内容）
-   - wrapper: #content-wrapper
-   - slider:  #zoomSlider
-   - label:   #zoomValue
 ========================= */
 function initZoom() {
   const wrapper = byId("content-wrapper");
@@ -571,25 +563,35 @@ function initZoom() {
 window.recordResult = function (type) {
   if (waiting) return;
   if (type !== "B" && type !== "P") return;
-  // 先结算本手（用上一手预测）
+
+  if (roundStopped || gameHistory.length >= MAX_HANDS) {
+    applyStoppedStateIfNeeded();
+    updateAlgoBar();
+    return;
+  }
+
   scoreWithActual(type);
-  // 再写入历史
   gameHistory.push(type);
-  saveHistory(); // ✅ 新增：保存历史（刷新不清空）
+  saveHistory();
   renderHistory();
   updateTrendChart();
+
+  applyStoppedStateIfNeeded();
+  updateAlgoBar();
+  if (roundStopped) return;
+
   updatePrediction();
 };
 window.undoLastMove = function () {
   if (waiting) return;
   gameHistory.pop();
-  saveHistory(); // ✅ 新增：保存历史（撤销后也保存）
+  saveHistory();
   rebuildAllFromScratch();
 };
 window.resetGame = function () {
   if (waiting) return;
   gameHistory = [];
-  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} // ✅ 新增：Reset 才清空持久化
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   pctIdx = 0;
   aWindowN = 4;
   if (timer) { clearTimeout(timer); timer = null; }
@@ -611,7 +613,8 @@ window.resetGame = function () {
 ========================= */
 document.addEventListener("DOMContentLoaded", function () {
   initZoom();
-  loadHistory(); // ✅ 新增：刷新先恢复历史
+  loadHistory();
+  applyStoppedStateIfNeeded();
   renderHistory();
   updateTrendChart();
   showIdle("请稍候...");
