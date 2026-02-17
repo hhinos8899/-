@@ -1,723 +1,174 @@
-:root{
-  --nav:#10233b;
-  --gold:#caa45a;
-  --gold2:#f0d28a;
-  --grid:rgba(0,0,0,.10);
-  --z:#ff6a00;
-  --x:#1fa0ff;
-  --h:#35a54a;
+.zoom-panel{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  margin:15px 0 5px;
+  color:#9aa4ad;
 }
-
-*{box-sizing:border-box}
-html,body{height:100%}
+.zoom-panel input[type=range]{
+  width:160px;
+}
+html { height: 100%; }
 body{
   margin:0;
-  background:#000;
-  font-family:Arial,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-  color:#fff;
-  padding-bottom:140px; /* 给底部固定按钮留空间 */
-}
-
-/* 顶部条 */
-.topBar{
-  height:52px;
-  background:var(--nav);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 14px;
-}
-.sysTitle{color:#ffd166;font-weight:900;font-size:18px}
-.topBtns{display:flex;gap:10px}
-.miniTop{
-  height:34px;
-  padding:0 14px;
-  border-radius:10px;
-  border:none;
-  background:#666;
-  color:#fff;
-  font-weight:900;
-}
-
-/* 白底网格纸 */
-.paper{
-  position:relative;
-  height:58vh;
-  min-height:380px;
-  background:#fff;
-  overflow:hidden;
-}
-.gridBg{
-  position:absolute; inset:0;
-  background:
-    linear-gradient(to right, var(--grid) 1px, transparent 1px) 0 0/40px 40px,
-    linear-gradient(to bottom, var(--grid) 1px, transparent 1px) 0 0/40px 40px;
-  pointer-events:none;          /* 关键：不挡点击 */
-  z-index:0;
-}
-.bigRoadTag{
-  position:absolute; right:12px; top:10px;
-  color:rgba(0,0,0,.55); font-weight:900;
-  z-index:2;
-}
-
-/* 左：珠盘（单列，新结果在底部） */
-.beadCol{
-  position:absolute;
-  left:12px; top:12px; bottom:12px;
-
-  right:760px;            /* ✅ 关键：右边留760px给“派生路+ABCD” */
-  width:auto;             /* ✅ 不要固定92px */
-
-  z-index:2;
+  padding:10px 0;
+  font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+  background-color:#021621;
+  color:#e0e0e0;
   display:flex;
   flex-direction:column;
-  gap:10px;
-
-  overflow:hidden;        /* 不要滚动条（按你要求） */
+  min-height:100vh;
+  overflow-y:auto;
 }
-
-/* 珠盘：6行换列，横向显示全部历史 */
-.beads{
-  flex:1;
-  display:grid;
-  grid-template-rows:repeat(6, 46px);
-  grid-auto-columns:46px;
-  grid-auto-flow:column;      /* 关键：按列增长 */
-  gap:10px;
-
-  align-content:start;
-  justify-content:start;
-
-  overflow-x:auto;            /* 横向滚动 */
-  overflow-y:hidden;
-  padding:6px 6px 10px;
+#content-wrapper{
+  width:100%;
+  max-width:750px;
+  background-color:rgba(255,255,255,0.08);
+  border-radius:12px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.3);
+  margin:0 auto;
+  padding:20px;
+  box-sizing:border-box;
 }
+.container{ width:100%; display:flex; flex-direction:column; }
 
-/* 复用你 JS 生成的 dot */
-.dot{
-  width:46px;height:46px;border-radius:999px;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:1000;color:#fff;
-  box-shadow:
-    inset 0 4px 8px rgba(255,255,255,.35),
-    inset 0 -6px 10px rgba(0,0,0,.5),
-    0 6px 10px rgba(0,0,0,.35);
-}
-.dot.red{ background: radial-gradient(circle at 35% 30%, #ffb1b1, #ff3b3b 55%, #8a0000); }
-.dot.blue{ background: radial-gradient(circle at 35% 30%, #a6ddff, #1fa0ff 55%, #003f88); }
-
-/* 中：派生路（+/-） */
-.derive{
-  position:absolute;
-  left:120px;
-  top:54%;
-  transform:translateY(-50%);
-  width:min(560px, 60vw);
-  background:rgba(255,255,255,.90);
-  border:1px solid rgba(0,0,0,.18);
-  border-radius:10px;
-  padding:12px 14px;
-  z-index:2;
-  box-shadow:0 8px 20px rgba(0,0,0,.15);
-}
-.deriveTitle{
-  color:rgba(0,0,0,.55);
-  font-weight:1000;
-  margin-bottom:8px;
-}
-.dRow{display:flex;align-items:center;margin:7px 0}
-.dRow span{width:22px;font-weight:1000;color:#333}
-.wl{display:flex;flex-wrap:wrap;gap:6px}
-
-.wl-box{
-  width:22px;height:22px;border-radius:4px;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:1000;font-size:14px;color:#fff;
-}
-.wl-box.plus{background:#16a34a}
-.wl-box.minus{background:#dc2626}
-
-/* 右：推荐框（A/B/C 一排，D 小框在右下） */
-.rec3{
-  position:absolute;
-  right:12px;
-  top:72px;
-  width:min(720px, 70vw);
-  display:grid;
-  grid-template-columns:repeat(3, 1fr);
-  gap:14px;
-  z-index:2;
-}
-.recD{
-  position:absolute;
-  right:12px;
-  top:190px;
-  width:min(240px, 28vw);
-  z-index:2;
-}
-.recCard{
-  background:#fff;
-  border:2px solid rgba(0,0,0,.18);
-  border-radius:10px;
-  padding:12px 14px;
-  color:#111;
-  min-height:96px;
-  box-shadow:0 10px 22px rgba(0,0,0,.18);
+.title{
+  text-align:center;
+  color:#FFD700;
+  font-size:2.4em;
+  margin:10px 0 15px;
+  font-weight:700;
 }
 
-/* 卡片里的 .big 变成右侧圆球 */
-.recCard .big{
-  width:58px;height:58px;border-radius:999px;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:1000;color:#fff;
-  margin:6px 0 0 auto;
-  background: radial-gradient(circle at 35% 30%, #ffb1b1, #d10000 60%, #7a0000);
-  box-shadow: inset 0 -3px 0 rgba(0,0,0,.22);
-}
-
-/* 黑金 HUD */
-.hud{
-  background: radial-gradient(ellipse at top, #2a1f12 0%, #0b0b0d 60%);
-  border-top:2px solid #3a2b18;
-}
-.hudHeader{
-  display:grid;
-  grid-template-columns: 1.1fr 1fr 1.2fr .6fr;
-  padding:10px 14px;
-  color:#d7c08a;
-  font-weight:1000;
-  border-bottom:1px solid rgba(202,164,90,.35);
+.prediction-box{
+  background-color:rgba(255,255,255,0.08);
+  padding:15px;
+  border-radius:12px;
+  margin-bottom:15px;
   text-align:center;
 }
-.hudBody{
-  display:grid;
-  grid-template-columns: 1.1fr 1fr 1.2fr .6fr;
-  padding:12px 14px 14px;
-  align-items:center;
-}
-
-.ratioBox{
-  border-right:1px solid rgba(202,164,90,.25);
-  padding:6px 10px;
-}
-.rRow{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:8px;
-  text-align:center;
-  align-items:center;
-  margin:6px 0;
-}
-.k{color:#d7c08a;font-weight:1000;font-size:18px}
-.v{color:#fff;font-weight:1000;font-size:20px}
-.k.z,.v.z{color:var(--z)}
-.k.x,.v.x{color:var(--x)}
-.k.h,.v.h{color:var(--h)}
-
-.nextBox{
-  display:flex;justify-content:center;align-items:center;
-  border-right:1px solid rgba(202,164,90,.25);
-}
-.nextBig{
-  font-size:64px;
-  font-weight:1000;
-  color:var(--gold2);
-  text-shadow:0 2px 0 rgba(0,0,0,.5);
-}
-.roadBox{
-  border-right:1px solid rgba(202,164,90,.25);
-  display:flex;justify-content:center;align-items:center;
-  padding:0 10px;
-}
-.roadTxt{color:#d7c08a;font-weight:1000;text-align:center;line-height:1.2}
-.lvBox{display:flex;justify-content:center;align-items:center}
-.lvBig{font-size:56px;font-weight:1000;color:var(--gold2)}
-
-/* 底部固定输入（永远可点） */
-.bottomFixed{
-  position:fixed;
-  left:0; right:0; bottom:0;
-  height:120px;
-  background:linear-gradient(#1a151b, #0b0810);
+.prediction-result{
+  margin:10px 0;
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  padding:12px 14px;
-  z-index:9999;
+  justify-content:center;
+  gap:10px;
 }
-.state{
-  font-size:44px;
-  font-weight:1000;
-  color:#d7c08a;
-  letter-spacing:6px;
+.result-label{
+  padding:8px 20px;
+  border-radius:25px;
+  font-weight:bold;
+  font-size:1.6em;
+  color:#e6edf3;
+  min-width:110px;
+  text-align:center;
 }
-.btnRow{display:flex;gap:12px;align-items:center}
-.cbtn{
-  width:86px;height:86px;border-radius:999px;
-  border:2px solid rgba(255,255,255,.25);
-  font-weight:1000;font-size:34px;color:#fff;
-  box-shadow:
-    inset 0 4px 8px rgba(255,255,255,.35),
-    inset 0 -6px 10px rgba(0,0,0,.5),
-    0 6px 10px rgba(0,0,0,.6);
+.result-label.player{ background-color:#28a745; }
+.result-label.banker{ background-color:#ff4d4d; }
+.percentage{
+  color:#58a6ff;
+  font-weight:bold;
+  font-size:1.2em;
 }
-.cbtn.z{
-  background: radial-gradient(circle at 35% 30%, #ffb36b, #ff5a00 60%, #a62a00);
+.prediction-text{ color:#8b949e; margin:8px 0 0; }
+
+.algo-bar{
+  margin-top:10px;
+  font-size:0.95em;
+  color:rgba(230,237,243,.75);
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;
+  padding:8px 10px;
 }
-.cbtn.x{
-  background: radial-gradient(circle at 35% 30%, #8bd0ff, #1fa0ff 60%, #004b99);
-}
-.cbtn.back{
-  background: radial-gradient(circle at 35% 30%, #f0d28a, #a97822 60%, #5a3a00);
-  color:#2b1600;
-}
-.resetBtn{
-  height:50px;
-  padding:0 18px;
+
+.game-record{
+  background-color:rgba(255,255,255,0.05);
+  padding:10px;
   border-radius:12px;
-  border:2px solid rgba(202,164,90,.55);
-  background:transparent;
-  color:#d7c08a;
-  font-weight:1000;
+  margin-bottom:15px;
+  overflow-x:auto;
 }
-
-/* 小屏 */
-@media (max-width: 900px){
-  .paper{height:56vh}
-  .rec3{grid-template-columns:1fr; width:54vw}
-  .recD{top:72px; width:54vw}
-  .derive{top:62%}
-  .state{font-size:34px}
-  .cbtn{width:74px;height:74px;font-size:30px}
-}
-/* ===== 右侧：派生路在上，ABCD 四卡一排（最终覆盖） ===== */
-
-/* 派生路在右侧上方 */
-.paper .derive{
-  left:auto !important;
-  right:12px !important;
-  top:72px !important;
-  transform:none !important;
-  width:min(820px,78vw) !important;
-  z-index:20 !important;
-}
-
-/* ABCD 四卡：强制一排四列 */
-.paper .rec3{
-  position:absolute !important;
-  right:12px !important;
-  top:210px !important; /* 在派生路下面 */
-  width:min(820px,78vw) !important;
-  display:grid !important;
-  grid-template-columns:repeat(4, minmax(0, 1fr)) !important;
-  gap:14px !important;
-  z-index:10 !important;
-}
-
-/* 彻底禁用旧的 recD，避免盖住C */
-.paper .recD{
-  display:none !important;
-}
-/* ===== 珠盘外框：必须加宽，不然永远只能看到两列 ===== */
-.paper .beadCol{
-  width: 360px !important;       /* 先用360：能看到6~7列 */
-  overflow: visible !important;  /* 不裁剪圆球/阴影 */
-}
-
-/* 珠盘本体：允许横向滚动 */
-.paper .beadCol .beads{
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  padding: 6px 6px 10px !important;
-}
-/* ===== 珠盘区域：强制占满左侧大区域（最终接管层）===== */
-.paper{ position:relative !important; }
-
-/* 右侧系统区大概占这么宽：派生路 + ABCD（你可改 760/820/900） */
-:root{ --rightZone: 820px; }
-
-/* 珠盘外框：不再用 width:92 这种窄栏，改为 left+right 吃满空间 */
-.paper .beadCol{
-  left:12px !important;
-  top:12px !important;
-  bottom:12px !important;
-  right: calc(var(--rightZone) + 12px) !important; /* ✅ 关键：右边留出系统区宽度 */
-  width:auto !important;
-  overflow: hidden !important; /* 你不想滑动就 hidden；想滚动就改 auto */
-}
-
-/* 珠盘内容一定要从左上开始铺 */
-.paper .beadCol .beads{
-  width:100% !important;
-  justify-content:start !important;
-  align-content:start !important;
-}
-/* ===== 珠盘球：自动缩放用的变量（最终覆盖层） ===== */
-:root{ --bead:46px; }
-
-/* 覆盖你原来写死 46px 的规则 */
-.paper .beadCol .beads{
-  grid-template-rows:repeat(6, var(--bead)) !important;
-  grid-auto-columns:var(--bead) !important;
-  gap:6px !important;
-  overflow:hidden !important;   /* 你说不要滑动 */
-}
-
-/* 覆盖你原来 dot 写死 width/height 的规则 */
-.paper .beadCol .dot{
-  width:var(--bead) !important;
-  height:var(--bead) !important;
-  font-size:calc(var(--bead) * 0.32) !important;
-}
-/* ===== 底部黑金统计条：小屏可读性修复 ===== */
-
-/* 这条黑色渐变栏整体 */
-.bottomBar, .footerBar, .statBar, .hud {
-  padding: 6px 10px !important;
-}
-
-/* 所有文字随屏幕缩放，但不低于12px */
-.bottomBar *, .footerBar *, .statBar *, .hud * {
-  font-size: clamp(12px, 1.3vw, 18px) !important;
-  line-height: 1.15 !important;
-}
-
-/* 每个小块允许换行，避免挤成一坨 */
-.bottomBar, .footerBar, .statBar, .hud {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 6px 14px !important;
-  align-items: center !important;
-}
-
-/* 局数 / 百分比 这些标签别被压没 */
-.bottomBar > *, .footerBar > *, .statBar > *, .hud > * {
-  min-width: 120px !important;
-  white-space: nowrap !important;
-}
-/* ===== 小窗口：底部统计条(HUD)可读性 ===== */
-@media (max-width: 1100px){
-
-  /* 1) 底部整条：更紧凑 */
-  .hud{
-    padding: 6px 10px !important;
-    gap: 6px 12px !important;
-  }
-
-  /* 2) 全部字体自适应 */
-  .hud, .hud *{
-    font-size: clamp(12px, 1.25vw, 16px) !important;
-    line-height: 1.15 !important;
-  }
-
-  /* 3) 把“标题那一行”缩小/允许换行（别挤死数字） */
-  .hud{
-    display:flex !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-  }
-
-  /* 4) 分隔线/竖线太占宽就干掉（你那条里明显有竖分隔） */
-  .hud .sep, .hud .line, .hud .vline, .hud .divider{
-    display:none !important;
-  }
-
-  /* 5) 大字（下局推荐那颗字）缩小一点，不然最占空间 */
-  .hud .big, .hud .bigText, .hud .recommendBig{
-    font-size: clamp(18px, 2.4vw, 32px) !important;
-  }
-}
-
-/* 更窄时再狠一点 */
-@media (max-width: 900px){
-  .hud, .hud *{ font-size: 12px !important; }
-  .hud{ gap: 4px 10px !important; }
-}
-/* ===== 底部HUD在小窗口自动缩小字体（安全版，不影响结构） ===== */
-@media (max-width: 1200px){
-  .hud, .hud *{
-    font-size: 14px !important;
-    line-height: 1.2 !important;
-  }
-
-  .nextBig{ font-size: 28px !important; }
-  .lvBig{ font-size: 28px !important; }
-}
-
-@media (max-width: 900px){
-  .hud, .hud *{
-    font-size: 12px !important;
-  }
-
-  .nextBig{ font-size: 22px !important; }
-  .lvBig{ font-size: 22px !important; }
-}
-/* ===== 一次性修复：小窗口 HUD 不消失 + 字不糊（按你的HTML类名写死） ===== */
-
-/* 1) 底部固定输入条高度（按你UI大概值，后面只改这个数也行） */
-:root{ --bottomFixedH: 150px; }
-
-/* 2) 底部按钮条固定在最底 */
-.bottomFixed{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999 !important;
-}
-
-/* 3) HUD 固定在按钮条上方（缩小也永远看得到） */
-.hud{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: var(--bottomFixedH) !important;
-  z-index: 9998 !important;
-
-  /* 紧凑一点 */
-  padding: 8px 12px !important;
-}
-
-/* 4) 页面内容别被两条固定栏盖住 */
-body{
-  padding-bottom: calc(var(--bottomFixedH) + 160px) !important;
-}
-
-/* 5) HUD 小屏可读性：字体自动变小 + 允许换行 */
-.hud, .hud *{
-  font-size: clamp(12px, 1.2vw, 16px) !important;
-  line-height: 1.15 !important;
-}
-
-@media (max-width: 1100px){
-  /* 小屏把标题行隐藏，省空间（你那行“牌局比例/下局推荐/当前主路/档位”） */
-  .hudHeader{ display:none !important; }
-
-  /* 推荐/档位大字缩小，不然最占宽 */
-  .nextBig{ font-size: 26px !important; }
-  .lvBig{ font-size: 26px !important; }
-
-  /* 主体允许换行 */
-  .hudBody{
-    display:flex !important;
-    flex-wrap:wrap !important;
-    gap: 8px 14px !important;
-    align-items:center !important;
-  }
-}
-/* ===== 修复：HUD 被 bottomFixed 盖住（小窗口最明显） ===== */
-
-/* 1) 先保证 bottomFixed 真的是固定在最底 */
-.bottomFixed{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999 !important;
-}
-
-/* 2) HUD 固定在按钮条上方（避免被盖住） */
-.hud{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 150px !important;  /* 150=按钮条高度，挡住就改大一点 */
-  z-index: 9998 !important;
-}
-
-/* 3) 页面内容整体往上让位（避免被两条固定栏盖住） */
-body{
-  padding-bottom: 320px !important; /* = bottomFixed(约150) + hud(约170) */
-}
-/* ===== 底部双栏系统重排（终极稳定版） ===== */
-
-/* 1️⃣ 按钮条固定最底 */
-.bottomFixed{
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-}
-
-/* 2️⃣ HUD 固定在按钮条正上方 */
-.hud{
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 120px;   /* 按钮条高度，大概120 */
-  z-index: 1001;
-}
-
-/* 3️⃣ 页面主体让出空间（否则内容被两条栏盖住） */
-.paper{
-  padding-bottom: 460px;
-}
-
-/* 4️⃣ HUD 小窗口自适应，不再挤爆 */
-.hudBody{
+.record-row{
   display:flex;
   flex-wrap:wrap;
-  gap:10px 20px;
+  gap:6px;
+  min-height:35px;
+  align-items:center;
+  justify-content:center;
+}
+.record-item{
+  min-width:35px;
+  height:35px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+  color:white;
+  font-size:0.85em;
+  box-shadow:0 2px 5px rgba(0,0,0,0.2);
+}
+.record-item.p{ background-color:#28a745; }
+.record-item.b{ background-color:#ff4d4d; }
+
+.control-panel{
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  margin:15px 0;
+}
+.btn{
+  padding:12px 22px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:bold;
+  font-size:1em;
+  box-shadow:0 4px 10px rgba(0,0,0,0.2);
+  color:white;
+  transition:transform .15s, opacity .15s;
+}
+.btn:hover{ transform:translateY(-2px); opacity:.92; }
+.player-btn{ background-color:#28a745; }
+.banker-btn{ background-color:#ff4d4d; }
+.back-btn{ background-color:#6a737d; }
+.reset-btn{ background-color:#30363d; }
+
+.instruction-btn{
+  display:block;
+  margin:10px auto 0;
+  padding:10px 18px;
+  background-color:#238636;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:bold;
+  color:white;
+  box-shadow:0 4px 10px rgba(0,0,0,0.2);
+}
+.instruction-btn:hover{ transform:translateY(-2px); opacity:.92; }
+
+.chart-container{
+  background-color:rgba(255,255,255,0.05);
+  padding:15px;
+  border-radius:12px;
+  margin:15px 0 0;
+}
+.chart-container canvas{ width:100% !important; height:auto !important; }
+
+.footer{
+  text-align:center;
+  margin-top:auto;
+  height:50px;
+  line-height:50px;
+  color:#6a737d;
+  font-size:0.9em;
 }
 
-@media (max-width: 1200px){
-  .hud, .hud *{
-    font-size:14px;
-  }
-  .nextBig{font-size:26px;}
-  .lvBig{font-size:26px;}
-}
-
-@media (max-width: 900px){
-  .hud, .hud *{
-    font-size:12px;
-  }
-  .nextBig{font-size:20px;}
-  .lvBig{font-size:20px;}
-}
-/* ===== 小窗口自动重排布局（核心修复）===== */
-
-@media (max-width: 1400px){
-
-  /* 整个纸面改为两列布局 */
-  .paper{
-    grid-template-columns: 200px 1fr !important;
-    grid-template-areas:
-      "beads mid"
-      "derive derive"
-      "rec rec";
-  }
-
-  /* 派生路和四条路变成整行 */
-  .derive, .rec3{
-    width: 100% !important;
-  }
-
-  /* 四条路卡片改为一行滚动，不挤爆 */
-  .rec3{
-    display:flex !important;
-    gap:12px !important;
-    overflow-x:auto !important;
-  }
-}
-
-/* 更小窗口再压缩 */
-@media (max-width: 1000px){
-  .beadCol{ transform: scale(0.9); transform-origin: left top; }
-  .derive{ transform: scale(0.95); transform-origin: top left; }
-}
-/* ===== 终结覆盖层：小窗口不乱、不遮挡（只贴这一段） ===== */
-:root{
-  --bottomFixedH: 150px;   /* 按钮条高度：不够就改 160/170 */
-  --hudH: 110px;           /* HUD 高度：不够就改 120 */
-}
-
-/* 页面必须允许往下滚，不然窗口变矮就“看不见” */
-html, body{
-  height: auto !important;
-  min-height: 100vh !important;
-  overflow-y: auto !important;
-}
-
-/* 按钮条：永远在最底 */
-.bottomFixed{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  height: var(--bottomFixedH) !important;
-  z-index: 10000 !important;
-}
-
-/* HUD：永远在按钮条上面 */
-.hud{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: var(--bottomFixedH) !important;
-  height: var(--hudH) !important;
-  z-index: 10001 !important;
-}
-
-/* 关键：内容区给两条固定栏“让位”，不然四条路/派生路会被盖住 */
-.paper{
-  padding-bottom: calc(var(--bottomFixedH) + var(--hudH) + 80px) !important;
-  overflow: visible !important;
-}
-
-/* HUD 变窄时不糊：允许换行 + 字体变小 */
-.hudBody{
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 8px 16px !important;
-  align-items: center !important;
-}
-
-@media (max-width: 1100px){
-  .hudHeader{ display: none !important; } /* 小屏标题行太占地，直接隐藏 */
-  .hud, .hud *{ font-size: 12px !important; line-height: 1.15 !important; }
-  .nextBig{ font-size: 24px !important; }
-  .lvBig{ font-size: 24px !important; }
-}
-/* ===== 方案A：允许滚动 + 底部两条固定栏稳定不遮挡（最终覆盖层） ===== */
-:root{
-  --bottomFixedH: 150px; /* 按钮条高度，不够就改 160/170 */
-  --hudH: 110px;         /* HUD高度，不够就改 120 */
-}
-
-/* 1) 允许页面上下滚动（关键） */
-html, body{
-  height: auto !important;
-  min-height: 100vh !important;
-  overflow-y: auto !important;
-}
-
-/* 2) 按钮条固定最底 */
-.bottomFixed{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 10000 !important;
-}
-
-/* 3) HUD 固定在按钮条上方 */
-.hud{
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: var(--bottomFixedH) !important;
-  z-index: 10001 !important;
-}
-
-/* 4) 内容区给两条固定栏让位（否则会被盖住） */
-.paper{
-  padding-bottom: calc(var(--bottomFixedH) + var(--hudH) + 80px) !important;
-}
-
-/* 5) 小窗口 HUD 变窄不糊：允许换行 */
-.hudBody{
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 8px 16px !important;
-  align-items: center !important;
-}
-/* ===== 解锁所有中间层的滚动锁 ===== */
-body, html, .paper, section, main{
-  overflow: visible !important;
-}
-
-/* 页面整体负责滚动 */
-html, body{
-  overflow-y: auto !important;
-}
-
-/* 内容区只负责高度，不再自己裁切 */
-.paper{
-  min-height: 100vh;
-}
-
-
-
+/* 弹窗 */
+.modal{ position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:9999; }
+.modal.hidden{ display:none; }
+.modal-box{ width:min(92vw, 560px); background:#0b1f2a; border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.45); }
+.modal-title{ font-weight:800; font-size:1.1em; margin-bottom:10px; color:#e6edf3; text-align:center; }
+.modal-text{ white-space:pre-line; color:rgba(230,237,243,.75); line-height:1.6; margin-bottom:14px; }
