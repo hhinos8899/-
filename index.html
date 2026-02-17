@@ -1,82 +1,64 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>四宫九路系统</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Prediction</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
+  <div id="content-wrapper">
+    <div class="container">
+      <h1 class="title">AI Prediction</h1>
 
-<div class="topBar">
-  <div class="sysTitle">四宫九路智能系统</div>
-  <div class="topBtns">
-    <button class="miniTop" onclick="resetAll()">重置</button>
-    <button class="miniTop" onclick="undoLast()">后退</button>
-  </div>
-</div>
-
-<section class="paper">
-  <div class="gridBg"></div>
-
-  <!-- 左：珠盘 -->
-  <aside class="beadCol">
-    <div class="label">珠盘</div>
-    <div id="roadmap" class="beads"></div>
-  </aside>
-
-  <!-- 中：派生路 -->
-  <div class="derive">
-    <div class="deriveTitle">派生路</div>
-    <div class="dRow"><span>A</span><div id="wlA" class="wl"></div></div>
-    <div class="dRow"><span>B</span><div id="wlB" class="wl"></div></div>
-    <div class="dRow"><span>C</span><div id="wlC" class="wl"></div></div>
-    <div class="dRow"><span>D</span><div id="wlD" class="wl"></div></div>
-  </div>
-
-  <!-- 右：推荐框（三个+一个小D） -->
-<div class="rec3">
-  <div id="A" class="recCard"></div>
-  <div id="B" class="recCard"></div>
-  <div id="C" class="recCard"></div>
-  <div id="D" class="recCard"></div>
-</div>
-
-
-  <div class="bigRoadTag">大路</div>
-</section>
-
-<section class="hud">
-  <div class="hudHeader">
-    <div>牌局比例</div><div>下局推荐</div><div>当前主路</div><div>档位</div>
-  </div>
-  <div class="hudBody">
-    <div class="ratioBox">
-      <div class="rRow">
-        <span class="k">局数</span><span class="k z">庄</span><span class="k x">闲</span><span class="k h">和</span>
+      <div class="prediction-box">
+        <div class="prediction-result">
+          <span class="result-label" id="resultLabel">AI</span>
+          <span class="percentage" id="resultPct"></span>
+        </div>
+        <p class="prediction-text" id="predictionText">请稍候...</p>
+        <div class="algo-bar" id="algoBar">当前算法：-｜胜率：-｜连错：0</div>
       </div>
-      <div class="rRow">
-        <span class="v" id="totalCount">0</span><span class="v z" id="zPct">0%</span><span class="v x" id="pPct">0%</span><span class="v h" id="tPct">0%</span>
+
+      <div class="game-record">
+        <div class="record-row" id="recordDisplay"></div>
       </div>
+
+      <div class="control-panel">
+        <button class="btn player-btn" onclick="recordResult('P')">Player (P)</button>
+        <button class="btn banker-btn" onclick="recordResult('B')">Banker (B)</button>
+        <button class="btn back-btn" onclick="undoLastMove()">← Back</button>
+        <button class="btn reset-btn" onclick="resetGame()">Reset</button>
+      </div>
+
+      <!-- 趋势图（必须保留） -->
+      <div class="chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
+
+      <button class="instruction-btn" onclick="toggleInstructions()">📋 查看胜率/说明</button>
+
+      <footer class="footer">
+        <p>© 2026</p>
+      </footer>
     </div>
-
-    <div class="nextBox"><div class="nextBig" id="bestDir">庄</div></div>
-    <div class="roadBox"><div class="roadTxt" id="bestRoad"></div></div>
-    <div class="lvBox"><div class="lvBig" id="bestLv">1</div></div>
   </div>
-</section>
 
-<!-- 底部固定输入（保证能点） -->
-<section class="bottomFixed">
-  <div class="state">正常</div>
-  <div class="btnRow">
-    <button class="cbtn z" onclick="inputOne('B')">庄</button>
-    <button class="cbtn x" onclick="inputOne('P')">闲</button>
-    <button class="cbtn back" onclick="undoLast()">←</button>
-    <button class="resetBtn" onclick="resetAll()">重置</button>
+  <!-- 说明弹窗 -->
+  <div id="instModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-title">说明 / 实时胜率</div>
+      <div id="instText" class="modal-text"></div>
+      <button class="btn back-btn" onclick="closeInstructions()">关闭</button>
+    </div>
   </div>
-</section>
 
-<script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
+<!-- 缩放控制 -->
+<div class="zoom-panel">
+  <input type="range" id="zoomSlider" min="50" max="100" step="5" value="70">
+  <span id="zoomValue">70%</span>
+</div>
