@@ -1,242 +1,659 @@
-const CONFIG = { WINDOW_N:12, LV2_THRESHOLD:4, FLIP_THRESHOLD:-2 };
+/* =========================================================
+   整合版 app.js（保持原页面结构不变）
+   - 缩放：有 zoomSlider/zoomValue 就启用
+   - 趋势图：canvas id = trendChart
+   - 预测UI：resultLabel / resultPct / predictionText
+   - 记录UI：recordDisplay
+   - 信息条：algoBar（有就更新，没有就忽略）
+   - 弹窗：instModal / instText（有就支持 toggleInstructions）
+   - 按钮：player-btn banker-btn back-btn reset-btn instruction-btn（有就禁用）
+   - 算法：A/B/C/D/E/F 全真规则
+   - 调度：实时胜率最高；当前算法连错>=3 强制换到其它最高胜率
+   - 撤销：从头重算（最稳，不会算错）
+========================================================= */
 
-class Road{
-  constructor(name,initDir,style){
-    this.name=name; this.dir=initDir; this.style=style;
-    this.wl=[]; this.win=0; this.loss=0;
-    this.missStreak=0; this.maxMissStreak=0;
-    this.lastPred=null;
+/* =========================
+   工具：解析 “BBPPBB→P，...” 成 Map
+   - 支持：中文逗号/英文逗号/句号/换行
+   - 支持：→ / -> / =>
+   - p 统一当 P
+   - 重复 key：以最后一次为准（Map 默认）
+========================= */
+function buildRuleMapFromText(raw) {
+  const m = new Map();
+  if (!raw) return m;
+
+  const normalized = raw
+    .replace(/\r/g, "\n")
+    .replace(/，/g, ",")
+    .replace(/。/g, ",")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const parts = normalized.split(",").map(s => s.trim()).filter(Boolean);
+
+  for (const part of parts) {
+    const p = part.replace(/\s/g, "");
+    const seg = p.split(/→|->|=>/);
+    if (seg.length !== 2) continue;
+
+    const key = seg[0].trim();
+    let val = seg[1].trim();
+    if (val === "p") val = "P";
+
+    if (!key || (val !== "B" && val !== "P")) continue;
+    m.set(key, val);
   }
-  confidence(){return this.wl.reduce((a,b)=>a+b,0);}
-  level(){return this.confidence()>=CONFIG.LV2_THRESHOLD?2:1;}
-  pushWL(hit){this.wl.push(hit?1:-1); if(this.wl.length>CONFIG.WINDOW_N)this.wl.shift();}
-  settle(actual){
-    if(this.lastPred===null)return;
-    const hit=(actual===this.lastPred);
-    this.pushWL(hit);
-    if(hit){this.win++;this.missStreak=0;}
-    else{this.loss++;this.missStreak++;if(this.missStreak>this.maxMissStreak)this.maxMissStreak=this.missStreak;}
-    if(this.confidence()<=CONFIG.FLIP_THRESHOLD)this.dir=this.dir==='B'?'P':'B';
-  }
-  nextPrediction(history){
-    const last=history.at(-1), prev=history.at(-2), conf=this.confidence();
-    if(this.style==='trend'){ if(prev&&last===prev)return last; return this.dir; }
-    if(this.style==='rhythm'){ if(conf>=0)return this.dir; return last==='B'?'P':'B'; }
-    if(this.style==='repair'){
-      if(conf<-4)return last==='B'?'P':'B';
-      if(prev&&last===prev)return last==='B'?'P':'B';
-      return this.dir;
+  return m;
+}
+
+function suffix(arr, n) {
+  if (arr.length < n) return null;
+  return arr.slice(arr.length - n).join("");
+}
+
+/* =========================
+   百分比循环（你用的那套）
+========================= */
+const PCT_LOOP = [92, 95, 97, 97, 95, 92];
+let pctIdx = 0;
+function nextFixedPercent() {
+  const v = PCT_LOOP[pctIdx];
+  pctIdx = (pctIdx + 1) % PCT_LOOP.length;
+  return v;
+}
+function fmtPct(v) { return `+${Number(v).toFixed(2)}%`; }
+
+/* =========================
+   A：你最早那套（递增窗口 4→5→6，最短3位）
+========================= */
+const RULES_A = new Map([
+  ["BBPP","P"],
+  ["BBPB","P"],
+  ["BPPPBB","P"],
+  ["BPPPBP","B"],
+  ["BPPPP","B"],
+  ["BBBB","B"],
+  ["BBBPB","P"],
+  ["BBBPPP","P"],
+  ["BPPBB","B"],
+  ["BPPBP","B"],
+  ["BBBPPB","P"],
+  ["BPBP","B"],
+  ["BPBB","B"],
+  ["BPB","P"],
+  ["PPBB","B"],
+  ["PPBPB","B"],
+  ["PPBPP","P"],
+  ["PBBBP","P"],
+  ["PBBBB","P"],
+  ["PPPBB","P"],
+  ["PPPP","P"],
+  ["PBPB","P"],
+  ["PPPBP","B"],
+  ["PBBP","P"],
+  ["PBPP","P"],
+]);
+
+let aWindowN = 4;
+function predictA(history) {
+  if (history.length < 4) { aWindowN = 4; return null; }
+
+  const maxLen = Math.min(aWindowN, history.length);
+  for (let len = maxLen; len >= 3; len--) {
+    const s = suffix(history, len);
+    if (s && RULES_A.has(s)) {
+      aWindowN = 4; // 命中回到4
+      return RULES_A.get(s);
     }
-    if(this.style==='stable'){
-      if(!last)return this.dir;
-      if(this.missStreak>=2||conf<0)return last==='B'?'P':'B';
-      if(prev&&last===prev)return last;
-      return this.dir;
+  }
+  if (aWindowN < 6) aWindowN += 1;
+  return null;
+}
+
+/* =========================
+   B：固定窗口=4（你定的 16 条）
+========================= */
+const RULES_B = new Map([
+  ["PBPB","B"],
+  ["PPBP","P"],
+  ["PBBB","B"],
+  ["PPPB","B"],
+  ["PPPP","P"],
+  ["PPBB","P"],
+  ["PBBP","P"],
+  ["PBPP","P"],
+  ["BBPP","P"],
+  ["BBPB","B"],
+  ["BPPP","P"],
+  ["BPBP","P"],
+  ["BBBB","B"],
+  ["BBBP","P"],
+  ["BPPB","P"],
+  ["BPBB","B"],
+]);
+
+function predictB(history) {
+  if (history.length < 4) return null;
+  const s = suffix(history, 4);
+  return RULES_B.get(s) || null;
+}
+
+/* =========================
+   C：你“规则C”那一整段（固定末6）
+========================= */
+const RULES_C_TEXT = `
+BBPPBB→P，BBPPBP→P，BBPPPB→P，BBBPPP→P，BBBBPP→P，BBBBBP→B，BBPPPP→P，
+BPBPBP→B，BPBPBB→B，BPBPPB→P，BPBPPP→P，BBBPPB→P，BBBPBB→B，BBBPBP→B，
+BBPPBP→P，BPPBBP→B，BPPBBB→B，BPPPBB→P，BPPPPP→P，BBBBPB→B，BBPBPB→P，
+BBPPPB→P，BBBPPB→P，BPPBPP→P，BPBBPB→B，BBPBBP→B，BPPPBB→P，BBPPPB→P，
+BPPPBP→P，BPPPPB→P，BPPBPB→P，BPBBBP→B，BBPBPP→B
+
+PPBBPP→P，PPBBPB→B，PPBBBP→B，PPPBBB→B，PPPPBB→P，PPPPPB→P，PPBBBB→B，
+PBBBBB→B，PBPBPB→B，PBPBBP→B，PBPBBB→B，PPPBBP→P，PPPBPP→P，PPPBPB→P，
+PPBBPB→B，PBBPPB→B，PBBPPP→P，PBBBPP→B，PBBBPB→B，PBBBBP→B，PPPPBP→P，
+PPBPBP→P，PPBBBP→B，PPPBBP→P，PBBPBB→B，PBPPBP→P，PPBPPB→P，PBBPBP→B，
+PBBBPP→B，PPBBBP→B，PBPBPP→P，PPBPPP→P，PBPPPB→P，PPBPBB→B，
+BPBBBP→B，BBPBPP→B，BBPBPP→P
+`;
+const RULES_C = buildRuleMapFromText(RULES_C_TEXT);
+
+function predictC(history) {
+  if (history.length < 6) return null;
+  const s = suffix(history, 6);
+  return RULES_C.get(s) || null;
+}
+
+/* =========================
+   D：你“规则D”那一整段（固定末6）
+========================= */
+const RULES_D_TEXT = `
+BBPPBB→B，BBPPBP→B，BBPPPB→B，BBBPPP→P，BBBBPP→B，BBBBBP→B，BBPPPP→B，
+BPBPBP→P，BPBPPB→B，BBBPPB→P，BBBPBB→P，BBBPBP→P，BPPBBP→B，BPPBBB→B，
+BPPPBB→P，BPPPBP→B，BPPPPB→P，BBBBPB→P，BBPBPB→B，BBPPPB→B，BBBPPB→P，
+BPPBPP→P，BPBBPB→P，BBPBBP→P，BPPBPB→B。BPPPBB→P，BBPPPB→B，
+BPBPBB→B，BBPBBB→P，BPBBBP→P，BBPBPP→P，BPBBPP→P
+
+PPBBPP→P，PPBBPB→P，PPBBBP→P，PPPBBB→B，PPPPBB→P，PPPPPB→P，PPBBBB→P，
+PBPBPB→B，PBPBBP→B，PPPBBP→B，PPPBPP→B，PPPBPB→B，PBBPPB→P，PBBPPP→P，
+PBBBPP→B，PBBBPB→P，PPPPBP→P，PPBPBP→P，PPBBBP→B，PPPBBP→B，PBBPBB→B，
+PBPPBP→B，PPBPPB→B，PBBPBP→P，PBBBPP→B，PPBBBP→P，PBPBPP→P，PPBPPP→P，
+PBPPPB→B，PPBPBB→B，PBPPBB→B，PBBBBP→P
+`;
+const RULES_D = buildRuleMapFromText(RULES_D_TEXT);
+
+function predictD(history) {
+  if (history.length < 6) return null;
+  const s = suffix(history, 6);
+  return RULES_D.get(s) || null;
+}
+
+/* =========================
+   E：你“第5套（E）正宗版”（固定末6：B段+P段）
+========================= */
+const RULES_E_B = buildRuleMapFromText(`
+BBPPBB→B，BBPPBP→P。BBPPPB→B，BBBPPP→B。BBBBPP→P，BBBBBP→P。BBPPPP→B，BPBPBP→p。
+BPBPPB→B，BBBPPB→P。BBBPBB→P，BBBPBP→B。BPPBBP→B，BPPBBB→P。BPPPBB→B，BPPPBP→P。
+BPPPPB→B，BBBBPB→B。BBPBPB→P，BBPPPB→P。BBBPPB→P，BPPBPP→P。BPBBPB→B，BBPBBP→P，
+BPPBPB→B，BBPPPB→B。BPBPBB→B。BBPBBB→P。BPBBBP→P，BBPBPP→B，BPBBPP→P，BPBPPP→B。BPPPPP→P。
+`);
+
+const RULES_E_P = buildRuleMapFromText(`
+PPBBPP→P，PPBBPB→B，PPBBBP→P，PPPBBB→P，PPPPBB→B，PPPPPB→B，PPBBBB→P，
+PBPBPB→B，PBPBBP→P，PPPBBP→B，PPPBPP→B，PPPBPB→P，PBBPPB→P，PBBPPP→B，PBBBPP→P，
+PBBBPB→B，PPPPBP→P，PPBPBP→B，PPBBBP→P，PPPBBP→B，PBBPBB→B，PBPPBP→P，PPBPPB→P，
+PBBPBP→P，PBBBPP→P，PPBBBP→P，PBPBPP→P，PPBPPP→B，PBPPPB→B，PPBPBB→P，PBPPBB→B，PBBBBP→P
+`);
+
+function predictE(history) {
+  if (history.length < 6) return null;
+  const s = suffix(history, 6);
+  if (s[0] === "B") return RULES_E_B.get(s) || null;
+  if (s[0] === "P") return RULES_E_P.get(s) || null;
+  return null;
+}
+
+/* =========================
+   F：规则六（固定末6：B段+P段）
+========================= */
+const RULES_F_P = buildRuleMapFromText(`
+PPBBPP→B ，PPBBPB→P，PPPBBB→B。PPPPBB→P。PPPPPB→B，PPBBBB→B。
+PBPBPB→P，PBPBBP→P。PPPBBP→P，PPPBPP→B。PPPBPB→P，PBBPPP→P。
+PBBBPP→B，PBBBPB→P。PBBBBP→P，PPPPBP→B。PPBPBP→B，PPBBBP→P。
+PPPBBP→P，PBBPBB→P。PBPPBP→B，PPBPPB→B，PBBPBP→B，PPBBBP→P。
+PBBBPP→B，PBPBPP→B。PPBPPP→P，PBPPBB→B。PBPPPP→P，PBPPPB→B。
+PPBPBB→P，PBPPBB→P
+`);
+
+const RULES_F_B = buildRuleMapFromText(`
+BBPPBB→P，BBPPBP→B。BBPPPB→B，BBBPPP→P。BBBBPP→B，BBBBBP→P。BBPPPP→P，BPBPBP→B。
+BPBPPB→B，BBBPPB→B。BBBPBB→P，BBBPBP→B。BPPBBP→P，BPPBBB→B。BPPPBB→P，BPPPBP→B。
+BPPPPB→B，BBBBPB→P。BBPBPB→P，BBPPPB→B。BPPBPP→B，BPBBPB→P。BBPBBP→P，BPPBPB→P。
+BBPPPB→B，BPBPBB→P。BBPBBB→B，BPBBBP→P。BBPBPP→B，BPBBPP→B。BPBPPP→P，BPPPPP→P。
+`);
+
+function predictF(history) {
+  if (history.length < 6) return null;
+  const s = suffix(history, 6);
+  if (s[0] === "B") return RULES_F_B.get(s) || null;
+  if (s[0] === "P") return RULES_F_P.get(s) || null;
+  return null;
+}
+
+/* =========================
+   引擎：实时胜率 + 连错3切换
+========================= */
+function makeAlgo(name, predictor) {
+  return { name, predictor, total: 0, hit: 0, loseStreak: 0 };
+}
+
+const ALGOS = [
+  makeAlgo("A", predictA),
+  makeAlgo("B", predictB),
+  makeAlgo("C", predictC),
+  makeAlgo("D", predictD),
+  makeAlgo("E", predictE),
+  makeAlgo("F", predictF),
+];
+
+function algoByName(name) { return ALGOS.find(a => a.name === name); }
+function rateOf(a) { return a.total === 0 ? 0 : (a.hit / a.total); }
+
+/* =========================
+   全局状态
+========================= */
+let gameHistory = [];
+let waiting = false;
+let timer = null;
+let trendChart = null;
+
+// 上一手预测快照（用来结算本手胜率）
+let pending = {
+  byAlgo: new Map(),      // algoName -> pred
+  activeAlgoName: null,   // 对外显示使用算法
+  activePred: null,       // 对外显示预测
+};
+
+/* =========================
+   DOM 工具
+========================= */
+function byId(id) { return document.getElementById(id); }
+function q(sel) { return document.querySelector(sel); }
+
+function setButtonsDisabled(disabled) {
+  const p = q(".player-btn");
+  const b = q(".banker-btn");
+  const back = q(".back-btn");
+  const reset = q(".reset-btn");
+  const inst = q(".instruction-btn");
+  if (p) p.disabled = disabled;
+  if (b) b.disabled = disabled;
+  if (back) back.disabled = disabled;
+  if (reset) reset.disabled = disabled;
+  if (inst) inst.disabled = disabled;
+}
+
+/* =========================
+   UI：记录
+========================= */
+function renderHistory() {
+  const el = byId("recordDisplay");
+  if (!el) return;
+  el.innerHTML = "";
+  gameHistory.forEach(t => {
+    const d = document.createElement("div");
+    d.className = `record-item ${t.toLowerCase()}`;
+    d.textContent = t;
+    el.appendChild(d);
+  });
+}
+
+/* =========================
+   UI：趋势图（累计B/P）
+========================= */
+function updateTrendChart() {
+  const canvas = byId("trendChart");
+  if (!canvas) return;
+  if (typeof Chart === "undefined") return;
+
+  const ctx = canvas.getContext("2d");
+  if (trendChart) trendChart.destroy();
+
+  let b = 0, p = 0;
+  const banker = [];
+  const player = [];
+
+  gameHistory.forEach(x => {
+    if (x === "B") b++;
+    if (x === "P") p++;
+    banker.push(b);
+    player.push(p);
+  });
+
+  trendChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: banker.map((_, i) => `Hand ${i + 1}`),
+      datasets: [
+        { label: "Banker", data: banker, borderColor: "#ff4d4d", tension: 0.25, fill: false },
+        { label: "Player", data: player, borderColor: "#28a745", tension: 0.25, fill: false },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: "#e6edf3" } } },
+      scales: {
+        x: { ticks: { color: "#9aa4ad" }, grid: { color: "rgba(255,255,255,.1)" } },
+        y: { beginAtZero: true, ticks: { color: "#9aa4ad" }, grid: { color: "rgba(255,255,255,.1)" } },
+      },
+    },
+  });
+}
+
+/* =========================
+   UI：预测显示
+========================= */
+function showPending() {
+  const label = byId("resultLabel");
+  const pctEl = byId("resultPct");
+  const text = byId("predictionText");
+
+  if (label) {
+    label.textContent = "AI建议";
+    label.classList.remove("player", "banker");
+  }
+  if (pctEl) pctEl.textContent = "...%";
+  if (text) text.textContent = "人工智能正在预测，请稍后...";
+}
+
+function showResult(side, pct) {
+  const label = byId("resultLabel");
+  const pctEl = byId("resultPct");
+  const text = byId("predictionText");
+
+  if (label) {
+    label.textContent = side;
+    label.classList.remove("player", "banker");
+    label.classList.add(side === "B" ? "banker" : "player");
+  }
+  if (pctEl) pctEl.textContent = fmtPct(pct);
+  if (text) text.textContent = side;
+}
+
+function showIdle(msg) {
+  const label = byId("resultLabel");
+  const pctEl = byId("resultPct");
+  const text = byId("predictionText");
+
+  if (label) {
+    label.textContent = "AI";
+    label.classList.remove("player", "banker");
+  }
+  if (pctEl) pctEl.textContent = "";
+  if (text) text.textContent = msg || "请稍候...";
+}
+
+/* =========================
+   UI：算法条（有就更新，没有就忽略）
+========================= */
+function updateAlgoBar() {
+  const bar = byId("algoBar");
+  if (!bar) return;
+  const name = pending.activeAlgoName || "-";
+  const a = name !== "-" ? algoByName(name) : null;
+  const r = a ? (rateOf(a) * 100).toFixed(2) + "%" : "-";
+  const ls = a ? a.loseStreak : 0;
+  bar.textContent = `当前算法：${name}｜胜率：${r}｜连错：${ls}`;
+}
+
+/* =========================
+   计算下一手：各算法预测
+========================= */
+function computeAllPredictions() {
+  const map = new Map();
+  for (const a of ALGOS) {
+    const pred = a.predictor(gameHistory);
+    if (pred === "B" || pred === "P") map.set(a.name, pred);
+  }
+  return map;
+}
+
+/* =========================
+   结算：用上一手 pending 结算本手胜率
+========================= */
+function scoreWithActual(actual) {
+  if (!pending || pending.byAlgo.size === 0) return;
+
+  // 所有算法：上一手只要出过预测，就计入胜率
+  for (const [name, pred] of pending.byAlgo.entries()) {
+    const algo = algoByName(name);
+    if (!algo) continue;
+    algo.total += 1;
+    if (pred === actual) algo.hit += 1;
+  }
+
+  // 当前使用算法：连错统计
+  if (pending.activeAlgoName && pending.activePred) {
+    const active = algoByName(pending.activeAlgoName);
+    if (active) {
+      if (pending.activePred === actual) active.loseStreak = 0;
+      else active.loseStreak += 1;
     }
-    return this.dir;
-  }
-  feed(a,h){ this.settle(a); this.dir=this.nextPrediction(h); this.lastPred=this.dir; }
-}
-
-let history=[];
-const roadA=new Road("A","P","trend");
-const roadB=new Road("B","P","rhythm");
-const roadC=new Road("C","B","repair");
-const roadD=new Road("D","P","stable");
-
-/* ===== 输入 ===== */
-function inputOne(a){
-  history.push(a);
-  roadA.feed(a,history); roadB.feed(a,history);
-  roadC.feed(a,history); roadD.feed(a,history);
-  render(); saveAll();
-}
-
-/* ===== 重置：唯一能清空历史 ===== */
-function resetAll(){
-  localStorage.removeItem("bjl_history_v1");
-  history.length=0;
-  resetRoad(roadA,"P"); resetRoad(roadB,"P");
-  resetRoad(roadC,"B"); resetRoad(roadD,"P");
-  render();
-}
-
-/* ===== 后退 ===== */
-function undoLast(){
-  if(history.length===0)return;
-  history.pop();
-  recomputeFrom(history);
-  render(); saveAll();
-}
-
-/* ===== 计算恢复 ===== */
-function resetRoad(r,d){ r.dir=d; r.wl=[]; r.win=0; r.loss=0; r.missStreak=0; r.maxMissStreak=0; r.lastPred=null; }
-function recomputeFrom(arr){
-  resetRoad(roadA,"P"); resetRoad(roadB,"P");
-  resetRoad(roadC,"B"); resetRoad(roadD,"P");
-  const copy=[...arr]; history.length=0;
-  for(const x of copy){
-    history.push(x);
-    roadA.feed(x,history); roadB.feed(x,history);
-    roadC.feed(x,history); roadD.feed(x,history);
   }
 }
 
-/* ===== 显示 ===== */
-function render(){
-  drawRoadmap();
+/* =========================
+   选择对外算法
+   - 默认：在“本手能预测”的算法里，胜率最高者
+   - 若当前算法连错>=3：强制排除当前算法再选
+========================= */
+function pickActive(predMap) {
+  if (predMap.size === 0) return null;
 
-  drawWL("wlA",roadA); drawWL("wlB",roadB);
-  drawWL("wlC",roadC); drawWL("wlD",roadD);
-  showCard("A",roadA); showCard("B",roadB);
-  showCard("C",roadC); showCard("D",roadD);
+  const currentName = pending.activeAlgoName;
+  const currentAlgo = currentName ? algoByName(currentName) : null;
+  const mustSwitch = currentAlgo ? (currentAlgo.loseStreak >= 3) : false;
 
-  chooseBest();
-  updateRatio();
+  const candidates = ALGOS
+    .filter(a => predMap.has(a.name))
+    .filter(a => !mustSwitch || a.name !== currentName)
+    .slice()
+    .sort((x, y) => rateOf(y) - rateOf(x));
 
-  // 放最后：就算出错也不影响统计/推荐/档位
-  try { fitBeadsToWidth(); } catch(e) { console.error(e); }
+  if (candidates.length > 0) return candidates[0].name;
+
+  // 极少情况：强制切换但只剩它能预测，则退回所有可预测的最高胜率
+  const fallback = ALGOS
+    .filter(a => predMap.has(a.name))
+    .slice()
+    .sort((x, y) => rateOf(y) - rateOf(x));
+
+  return fallback.length ? fallback[0].name : null;
 }
 
+/* =========================
+   生成下一手预测（2秒延迟）
+========================= */
+function updatePrediction() {
+  if (timer) { clearTimeout(timer); timer = null; }
 
+  const predMap = computeAllPredictions();
+  const activeName = pickActive(predMap);
+  const activePred = activeName ? predMap.get(activeName) : null;
 
-/* 珠盘：显示顺序修复（显示用 reverse，算法 history 不反转） */
-function drawRoadmap(){
-  const el = document.getElementById("roadmap");
-  if(!el) return;
+  pending = { byAlgo: predMap, activeAlgoName: activeName, activePred: activePred };
+  updateAlgoBar();
 
-  const ROWS = 6;
-
-  let html = "";
-
-  for(let i=0;i<history.length;i++){
-    const r = history[i];
-
-    const row = (i % ROWS) + 1;           // 第几行
-    const col = Math.floor(i / ROWS) + 1; // 第几列
-
-    html += `<div class="dot ${r==='B'?'red':'blue'}"
-              style="grid-row:${row};grid-column:${col};">
-              ${r==='B'?'庄':'闲'}
-            </div>`;
+  if (!activePred) {
+    showIdle("请稍候...");
+    return;
   }
 
-  el.innerHTML = html;
-  el.scrollLeft = el.scrollWidth;
+  waiting = true;
+  setButtonsDisabled(true);
+  showPending();
 
-  // 自动滚到最右边
-  el.scrollLeft = el.scrollWidth;
+  const pct = nextFixedPercent();
+  timer = setTimeout(() => {
+    showResult(activePred, pct);
+    waiting = false;
+    setButtonsDisabled(false);
+    timer = null;
+    updateAlgoBar();
+  }, 2000);
 }
 
-function drawWL(id,r){
-  document.getElementById(id).innerHTML=r.wl.map(v=>`<div class="wl-box ${v>0?'plus':'minus'}">${v>0?'+':'-'}</div>`).join("");
-}
+/* =========================
+   撤销：从头重算（最稳）
+========================= */
+function rebuildAllFromScratch() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  waiting = false;
+  setButtonsDisabled(false);
 
-function showCard(id,r){
-  document.getElementById(id).innerHTML=
-    `路 ${id}<div class="big">${r.dir==='B'?'庄':'闲'}</div>
-     档位:${r.level()}<br>
-     赢:${r.win} 输:${r.loss}<br>
-     连错:${r.missStreak} 最大:${r.maxMissStreak}<br>
-     信心:${r.confidence()}`;
-}
+  const saved = [...gameHistory];
 
-/* ===== 人脑选路（你原逻辑）===== */
-function getRegime(){
-  const h=history.slice(-18); if(h.length<6)return"CHOP";
-  let flips=0,repeats=0,run=1,maxRun=1;
-  for(let i=1;i<h.length;i++){
-    if(h[i]!==h[i-1]){flips++;run=1;}
-    else{repeats++;run++;if(run>maxRun)maxRun=run;}
+  // 清空统计
+  gameHistory = [];
+  pctIdx = 0;
+  aWindowN = 4;
+
+  for (const a of ALGOS) {
+    a.total = 0;
+    a.hit = 0;
+    a.loseStreak = 0;
   }
-  if(maxRun>=5||repeats/(h.length-1)>=0.62)return"TREND";
-  if(flips/(h.length-1)>=0.68)return"ALTERNATE";
-  return"CHOP";
-}
 
-const PICK={W:7,lastBest:"A"};
+  pending = { byAlgo: new Map(), activeAlgoName: null, activePred: null };
 
-function score(r){
-  const s=r.wl.slice(-PICK.W); let w=0,l=0; s.forEach(v=>v>0?w++:l++);
-  return (w-l*1.1)-(r.missStreak*2)-(r.confidence()<0?1.5:0);
-}
+  // 先算第一手预测（通常无）
+  updatePrediction();
 
-function chooseBest(){
-  const reg=getRegime(),roads={A:roadA,B:roadB,C:roadC,D:roadD};
-  const bias={A:0,B:0,C:0,D:0};
-  if(reg==="TREND")bias.A+=2;
-  else if(reg==="ALTERNATE"){bias.B+=1.5;bias.C+=1;}
-  else bias.D+=1.5;
+  // 重放：先结算再推进（重放不走2秒动画）
+  for (const outcome of saved) {
+    scoreWithActual(outcome);
+    gameHistory.push(outcome);
 
-  let best="A",bestScore=-999;
-  for(const k in roads){
-    const sc=score(roads[k])+bias[k];
-    if(sc>bestScore){bestScore=sc;best=k;}
+    const predMap = computeAllPredictions();
+    const activeName = pickActive(predMap);
+    const activePred = activeName ? predMap.get(activeName) : null;
+    pending = { byAlgo: predMap, activeAlgoName: activeName, activePred };
   }
-  if(roads[PICK.lastBest].missStreak>=1||bestScore>score(roads[PICK.lastBest])+0.8)PICK.lastBest=best;
 
-  document.getElementById("bestRoad").innerText=`${PICK.lastBest}（${reg}）`;
-  document.getElementById("bestDir").innerText=roads[PICK.lastBest].dir==='B'?'庄':'闲';
-  document.getElementById("bestLv").innerText=roads[PICK.lastBest].level();
+  renderHistory();
+  updateTrendChart();
+  updatePrediction();
 }
 
-/* 比例：局数/庄/闲/和%（你基本没用和，这里保留） */
-function updateRatio(){
-  const total = history.length;
-  const z = history.filter(x=>x==="B").length;
-  const p = history.filter(x=>x==="P").length;
-  const t = history.filter(x=>x==="T").length;
-  const pct = (n)=> total ? Math.round(n/total*100) + "%" : "0%";
+/* =========================
+   弹窗：胜率/说明（有就启用）
+========================= */
+window.toggleInstructions = function () {
+  const modal = byId("instModal");
+  const text = byId("instText");
+  if (!modal || !text) return;
 
-  const $ = (id)=>document.getElementById(id);
-  $("totalCount").innerText = String(total);
-  $("zPct").innerText = pct(z);
-  $("pPct").innerText = pct(p);
-  $("tPct").innerText = pct(t);
+  const lines = [];
+  lines.push("算法：A/B/C/D/E/F（后台同时统计胜率）");
+  lines.push("调度：实时胜率最高出预测；当前算法连错3把→强制切到其它最高胜率");
+  lines.push("");
+
+  const sorted = [...ALGOS].sort((x, y) => rateOf(y) - rateOf(x));
+  for (const a of sorted) {
+    const r = (rateOf(a) * 100).toFixed(2) + "%";
+    lines.push(`- ${a.name}: ${a.hit}/${a.total} = ${r}（连错：${a.loseStreak}）`);
+  }
+
+  text.textContent = lines.join("\n");
+  modal.classList.remove("hidden");
+};
+
+window.closeInstructions = function () {
+  const modal = byId("instModal");
+  if (modal) modal.classList.add("hidden");
+};
+
+/* =========================
+   缩放（有滑块就启用；不改变你其它内容）
+   - wrapper: #content-wrapper
+   - slider:  #zoomSlider
+   - label:   #zoomValue
+========================= */
+function initZoom() {
+  const wrapper = byId("content-wrapper");
+  const slider = byId("zoomSlider");
+  const label = byId("zoomValue");
+  if (!wrapper || !slider) return;
+
+  const apply = (v) => {
+    const n = Number(v);
+    if (Number.isNaN(n)) return;
+    wrapper.style.transform = `scale(${n / 100})`;
+    wrapper.style.transformOrigin = "top center";
+    if (label) label.textContent = `${n}%`;
+  };
+
+  apply(slider.value || 70);
+  slider.addEventListener("input", (e) => apply(e.target.value));
 }
 
-/* ===== 自动恢复 ===== */
-function saveAll(){ localStorage.setItem("bjl_history_v1",JSON.stringify(history)); }
-function restore(){
-  const s=localStorage.getItem("bjl_history_v1");
-  if(!s)return;
-  const arr=JSON.parse(s);
-  if(!Array.isArray(arr)||arr.length===0)return;
-  recomputeFrom(arr); render();
-}
+/* =========================
+   按钮
+========================= */
+window.recordResult = function (type) {
+  if (waiting) return;
+  if (type !== "B" && type !== "P") return;
 
-window.inputOne=inputOne;
-window.resetAll=resetAll;
-window.undoLast=undoLast;
-window.addEventListener("load",()=>{restore();render();});
-function fitBeadsToWidth(){
-  const beadCol = document.querySelector(".beadCol");
-  const beadsEl = document.getElementById("roadmap"); // 你的珠盘容器
-  if(!beadCol || !beadsEl) return;
+  // 先结算本手（用上一手预测）
+  scoreWithActual(type);
 
-  const ROWS = 6;
-  const total = Array.isArray(history) ? history.length : 0;
-  const cols = Math.max(1, Math.ceil(total / ROWS));
+  // 再写入历史
+  gameHistory.push(type);
 
-  const gap = 6;        // 要和CSS的 gap 一致
-  const padW = 16;      // 左右预留
-  const padH = 10;      // 上下预留（给 label / padding 留空间）
+  renderHistory();
+  updateTrendChart();
+  updatePrediction();
+};
 
-  const usableW = Math.max(0, beadCol.clientWidth - padW);
-  const usableH = Math.max(0, beadsEl.clientHeight - padH);
+window.undoLastMove = function () {
+  if (waiting) return;
+  gameHistory.pop();
+  rebuildAllFromScratch();
+};
 
-  // 由宽度决定的球大小（要塞下 cols 列）
-  let cellW = Math.floor((usableW - (cols - 1) * gap) / cols);
+window.resetGame = function () {
+  if (waiting) return;
 
-  // 由高度决定的球大小（要塞下 6 行）
-  let cellH = Math.floor((usableH - (ROWS - 1) * gap) / ROWS);
+  gameHistory = [];
+  pctIdx = 0;
+  aWindowN = 4;
 
-  let cell = Math.min(cellW, cellH);
-  if(!Number.isFinite(cell)) cell = 46;
+  if (timer) { clearTimeout(timer); timer = null; }
 
-  cell = Math.max(12, Math.min(46, cell)); // 模式2：最小到12
-  document.documentElement.style.setProperty("--bead", cell + "px");
-}
+  for (const a of ALGOS) {
+    a.total = 0;
+    a.hit = 0;
+    a.loseStreak = 0;
+  }
 
-window.addEventListener("resize", ()=>{ try{ fitBeadsToWidth(); }catch(e){} });
+  pending = { byAlgo: new Map(), activeAlgoName: null, activePred: null };
 
+  setButtonsDisabled(false);
+  renderHistory();
+  updateTrendChart();
+  showIdle("请稍候...");
+  updateAlgoBar();
+  updatePrediction();
+};
+
+/* =========================
+   初始化
+========================= */
+document.addEventListener("DOMContentLoaded", function () {
+  initZoom();
+  renderHistory();
+  updateTrendChart();
+  showIdle("请稍候...");
+  updateAlgoBar();
+  updatePrediction();
+});
